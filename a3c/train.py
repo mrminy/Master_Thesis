@@ -9,7 +9,7 @@ from inspect import getsourcefile
 import gym
 import tensorflow as tf
 
-from a3c.estimators import PolicyEstimator
+from a3c.estimators import PolicyEstimator, DynamicsEstimator
 from a3c.estimators import ValueEstimator
 from a3c.helpers import AtariEnvWrapper
 from a3c.policy_monitor import PolicyMonitor
@@ -27,8 +27,8 @@ tf.flags.DEFINE_integer("t_max", 5, "Number of steps before performing an update
 tf.flags.DEFINE_integer("max_global_steps", 100000,
                         "Stop training after this many steps in the environment. Defaults to running indefinitely.")
 tf.flags.DEFINE_integer("eval_every", 300, "Evaluate the policy every N seconds")
-tf.flags.DEFINE_boolean("reset", False, "If set, delete the existing model directory and start training from scratch.")
-tf.flags.DEFINE_integer("parallelism", None, "Number of threads to run. If not set we run [num_cpu_cores] threads.")
+tf.flags.DEFINE_boolean("reset", True, "If set, delete the existing model directory and start training from scratch.")
+tf.flags.DEFINE_integer("parallelism", 1, "Number of threads to run. If not set we run [num_cpu_cores] threads.")
 
 FLAGS = tf.flags.FLAGS
 
@@ -73,6 +73,7 @@ with tf.device("/cpu:0"):
     with tf.variable_scope("global") as vs:
         policy_net = PolicyEstimator(num_outputs=len(VALID_ACTIONS))
         value_net = ValueEstimator(reuse=True)
+        dynamics_net = DynamicsEstimator()
 
     # Global step iterator
     global_counter = itertools.count()
@@ -92,6 +93,7 @@ with tf.device("/cpu:0"):
             env=make_env(),
             policy_net=policy_net,
             value_net=value_net,
+            dynamics_net=dynamics_net,
             global_counter=global_counter,
             discount_factor=0.99,
             summary_writer=worker_summary_writer,

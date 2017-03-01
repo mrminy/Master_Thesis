@@ -13,7 +13,8 @@ import numpy as np
 from scipy.misc import imresize
 from skimage.color import rgb2gray
 
-import autoencoder_tests.keras_autoencoders as keras_autoencoders
+from autoencoder_experiments.keras_autoencoders import build_deep_predictor, build_conv_combo_autoencoder, \
+    train_autoencoder, encode_to_samples, train_predictor, predict_autoencoder, plot_images
 
 
 def preprocess(observation, crop_top=True, grey_scale=True, flatten=False):
@@ -74,8 +75,8 @@ if __name__ == '__main__':
 
     logger.setLevel(logging.INFO)
 
-    env = gym.make('MontezumaRevenge-v0')
-    # env = gym.make('Pong-v0')
+    # env = gym.make('MontezumaRevenge-v0')
+    env = gym.make('Pong-v0')
     # env = gym.make('MsPacman-v0')
     crop_top = True
 
@@ -102,8 +103,8 @@ if __name__ == '__main__':
     another_room = my_er[-1]
 
     z_shape = 512
-    autoencoder, encoder, decoder = keras_autoencoders.build_conv_combo_autoencoder()
-    predictor = keras_autoencoders.build_deep_predictor(z_shape, env.action_space.n)
+    autoencoder, encoder, decoder = build_conv_combo_autoencoder()
+    predictor = build_deep_predictor(z_shape, env.action_space.n)
 
     # Parameters for updating the dynamics model (autoencoder and transition prediction model)
     batch_size = 32
@@ -141,16 +142,15 @@ if __name__ == '__main__':
 
             np_er = np.array(er)
 
-            max_loss = keras_autoencoders.train_autoencoder(autoencoder, np_er, np_er[:batch_size],
-                                                            batch_size=batch_size, nb_batches=nb_batches,
-                                                            nb_epoch=nb_epochs)
+            max_loss = train_autoencoder(autoencoder, np_er, np_er[:batch_size],
+                                         batch_size=batch_size, nb_batches=nb_batches,
+                                         nb_epoch=nb_epochs)
             if max_loss < autoencoder_loss_threshold:
                 print("updates the transition prediction model")
-                predictor_x, predictor_y = keras_autoencoders.encode_to_samples(encoder, np_er, action_history, z_shape,
-                                                                                split_inputs=False)
-                transition_loss_history.append(
-                    keras_autoencoders.train_predictor(predictor, predictor_x, predictor_y, nb_epoch=nb_epochs,
-                                                       batch_size=batch_size))
+                predictor_x, predictor_y = encode_to_samples(encoder, np_er, action_history, z_shape,
+                                                             split_inputs=False)
+                transition_loss_history.append(train_predictor(predictor, predictor_x, predictor_y, nb_epoch=nb_epochs,
+                                                               batch_size=batch_size))
         while True:
             if timestep_counter % frame_skip == 0:
                 action = agent.act(ob, reward, done)
@@ -189,7 +189,7 @@ if __name__ == '__main__':
     # Compare room1 to the never seen room2 in Montezuma's Revenge (real frame on top, predicted frame on bottom)
     room1_ob_pre = my_er[-400].reshape(84, 84, 1)
     x_input = np.array([er[0], room1_ob_pre])
-    print(keras_autoencoders.predict_autoencoder(autoencoder, x_input, show_examples=True))
+    print(predict_autoencoder(autoencoder, x_input, show_examples=True))
 
     # Show predicted next frame with the full dynamics model (real frame on top, predicted frame on bottom)
     x_input = np.array(er[100:110])
@@ -199,7 +199,7 @@ if __name__ == '__main__':
     x_input_decoded = decoder.predict(predictor.predict(np.concatenate((encoded_x_input, actions), axis=1)))
     images_org = np.array(er[101:111])
     images_org = np.concatenate((x_input, images_org))
-    keras_autoencoders.plot_images(images_org, x_input_decoded, nb_examples=10)
+    plot_images(images_org, x_input_decoded, nb_examples=10)
 
     # pickle.dump(transition_loss_history, open('transition_loss_history.pickle', 'wb'))
     plt.plot(transition_loss_history)

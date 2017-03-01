@@ -15,16 +15,11 @@ def build_shared_network(X, add_summaries=False):
     """
 
     # Three convolutional layers
-    conv1 = tf.contrib.layers.conv2d(
-        X, 16, 8, 4, activation_fn=tf.nn.relu, scope="conv1")
-    conv2 = tf.contrib.layers.conv2d(
-        conv1, 32, 4, 2, activation_fn=tf.nn.relu, scope="conv2")
+    conv1 = tf.contrib.layers.conv2d(X, 16, 8, 4, activation_fn=tf.nn.relu, scope="conv1")
+    conv2 = tf.contrib.layers.conv2d(conv1, 32, 4, 2, activation_fn=tf.nn.relu, scope="conv2")
 
     # Fully connected layer
-    fc1 = tf.contrib.layers.fully_connected(
-        inputs=tf.contrib.layers.flatten(conv2),
-        num_outputs=256,
-        scope="fc1")
+    fc1 = tf.contrib.layers.fully_connected(inputs=tf.contrib.layers.flatten(conv2), num_outputs=256, scope="fc1")
 
     if add_summaries:
         tf.contrib.layers.summarize_activation(conv1)
@@ -32,6 +27,66 @@ def build_shared_network(X, add_summaries=False):
         tf.contrib.layers.summarize_activation(fc1)
 
     return fc1
+
+
+def build_decoder(X, shape, add_summaries=False):
+    defc1 = tf.contrib.layers.fully_connected(inputs=X, num_outputs=28224, scope="defc1")
+
+    # Three convolutional layers
+    deconv1 = tf.contrib.layers.conv2d(tf.reshape(defc1, shape), 32, 4, 2, activation_fn=tf.nn.relu,
+                                       scope="deconv1")
+    deconv2 = tf.contrib.layers.conv2d(deconv1, 16, 8, 4, activation_fn=tf.nn.relu, scope="deconv2")
+
+    deconv3 = tf.contrib.layers.conv2d(deconv2, 4, 84, 84, activation_fn=tf.nn.relu, scope="deconv3")
+
+    if add_summaries:
+        tf.contrib.layers.summarize_activation(defc1)
+        tf.contrib.layers.summarize_activation(deconv1)
+        tf.contrib.layers.summarize_activation(deconv2)
+        tf.contrib.layers.summarize_activation(deconv3)
+
+    return deconv3
+
+
+class DynamicsEstimator:
+    def __init__(self, reuse=False, trainable=True):
+        # Placeholders for our input
+        # Our input are 4 RGB frames of shape 84, 84 each
+        self.states = tf.placeholder(shape=[None, 84, 84, 4], dtype=tf.uint8, name="X")
+        # Integer id of which action was selected
+        # self.actions = tf.placeholder(shape=[None], dtype=tf.int32, name="actions")
+
+        # Normalize
+        X = tf.to_float(self.states) / 255.
+        # batch_size = tf.shape(self.states)[0]
+
+        with tf.variable_scope("dynamics_net"):
+            self.encoder = build_shared_network(X, add_summaries=(not reuse))
+            self.decoder = build_decoder(self.encoder, tf.shape(self.states), add_summaries=(not reuse))
+            # We add entropy to the loss to encourage exploration
+            # self.entropy = -tf.reduce_sum(self.probs * tf.log(self.probs), 1, name="entropy")
+            # self.entropy_mean = tf.reduce_mean(self.entropy, name="entropy_mean")
+
+            # Get the predictions for the chosen actions only
+            # gather_indices = tf.range(batch_size) * tf.shape(self.probs)[1] + self.actions
+            # self.picked_action_probs = tf.gather(tf.reshape(self.probs, [-1]), gather_indices)
+
+            # self.losses = - (tf.log(self.picked_action_probs) * self.targets + 0.01 * self.entropy)
+            # self.loss = tf.reduce_sum(self.losses, name="loss")
+            self.cost = tf.reduce_mean(tf.square(X - self.decoder), name="cost")
+
+            tf.summary.scalar(self.cost.op.name, self.cost)
+            self.optimizer = tf.train.AdamOptimizer() #.minimize(self.cost)
+
+            self.grads_and_vars = self.optimizer.compute_gradients(self.cost)
+            self.grads_and_vars = [[grad, var] for grad, var in self.grads_and_vars if grad is not None]
+            self.train_op = self.optimizer.apply_gradients(self.grads_and_vars,
+                                                           global_step=tf.contrib.framework.get_global_step())
+
+            var_scope_name = tf.get_variable_scope().name
+            summary_ops = tf.get_collection(tf.GraphKeys.SUMMARIES)
+            sumaries = [s for s in summary_ops if var_scope_name in s.name]
+            self.summaries = tf.summary.merge(sumaries)
 
 
 class PolicyEstimator():

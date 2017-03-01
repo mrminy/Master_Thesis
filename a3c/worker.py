@@ -7,7 +7,7 @@ from inspect import getsourcefile
 import numpy as np
 import tensorflow as tf
 
-from a3c.estimators import PolicyEstimator
+from a3c.estimators import PolicyEstimator, DynamicsEstimator
 from a3c.estimators import ValueEstimator
 from a3c.helpers import atari_make_initial_state, atari_make_next_state
 from a3c.state_processor import StateProcessor
@@ -66,7 +66,7 @@ class Worker(object):
       max_global_steps: If set, stop coordinator when global_counter > max_global_steps
     """
 
-    def __init__(self, name, env, policy_net, value_net, global_counter, discount_factor=0.99, summary_writer=None,
+    def __init__(self, name, env, policy_net, value_net, dynamics_net, global_counter, discount_factor=0.99, summary_writer=None,
                  max_global_steps=None):
         self.name = name
         self.discount_factor = discount_factor
@@ -74,6 +74,7 @@ class Worker(object):
         self.global_step = tf.contrib.framework.get_global_step()
         self.global_policy_net = policy_net
         self.global_value_net = value_net
+        self.global_dynamics_net = dynamics_net
         self.global_counter = global_counter
         self.local_counter = itertools.count()
         self.sp = StateProcessor()
@@ -84,6 +85,7 @@ class Worker(object):
         with tf.variable_scope(name):
             self.policy_net = PolicyEstimator(policy_net.num_outputs)
             self.value_net = ValueEstimator(reuse=True)
+            self.dynamics_net = DynamicsEstimator()
 
         # Op to copy params from global policy/valuenets
         self.copy_params_op = make_copy_params_op(
@@ -92,6 +94,7 @@ class Worker(object):
 
         self.vnet_train_op = make_train_op(self.value_net, self.global_value_net)
         self.pnet_train_op = make_train_op(self.policy_net, self.global_policy_net)
+        self.dnet_train_op = make_train_op(self.dynamics_net, self.global_dynamics_net)
 
         self.state = None
 
@@ -109,6 +112,14 @@ class Worker(object):
 
                     if self.max_global_steps is not None and global_t >= self.max_global_steps:
                         tf.logging.info("Reached global step {}. Stopping.".format(global_t))
+                        print("Reached global step", global_t, local_t)
+                        """
+                        8.135M on tensorboard
+                        Reached global step 20000001 2480376
+                        Reached global step 20000004 2507034
+                        Reached global step 20000009 2499678
+                        Reached global step 20000011 2502577
+                        """
                         coord.request_stop()
                         return
 
@@ -127,6 +138,10 @@ class Worker(object):
         feed_dict = {self.value_net.states: [state]}
         preds = sess.run(self.value_net.predictions, feed_dict)
         return preds["logits"][0]
+
+    def _dynamics_net_predict(self, state, sess):
+        # TODO
+        pass
 
     def run_n_steps(self, n, sess):
         transitions = []
@@ -164,7 +179,7 @@ class Worker(object):
           sess: A Tensorflow session
         """
 
-        # If we episode was not done we bootstrap the value from the last state
+        # If the episode was not done we bootstrap the value from the last state
         reward = 0.0
         if not transitions[-1].done:
             reward = self._value_net_predict(transitions[-1].next_state, sess)
@@ -190,23 +205,27 @@ class Worker(object):
             self.policy_net.actions: actions,
             self.value_net.states: np.array(states),
             self.value_net.targets: value_targets,
+            self.dynamics_net.states: np.array(states)
         }
 
         # Train the global estimators using local gradients
-        global_step, pnet_loss, vnet_loss, _, _, pnet_summaries, vnet_summaries = sess.run([
+        global_step, pnet_loss, vnet_loss, _, _, pnet_summaries, vnet_summaries, _, dnet_summaries = sess.run([
             self.global_step,
             self.policy_net.loss,
             self.value_net.loss,
             self.pnet_train_op,
             self.vnet_train_op,
             self.policy_net.summaries,
-            self.value_net.summaries
+            self.value_net.summaries,
+            self.dnet_train_op,
+            self.dynamics_net.summaries
         ], feed_dict)
 
         # Write summaries
         if self.summary_writer is not None:
             self.summary_writer.add_summary(pnet_summaries, global_step)
             self.summary_writer.add_summary(vnet_summaries, global_step)
+            # self.summary_writer.add_summary(dynamics_cost, global_step)
             self.summary_writer.flush()
 
         return pnet_loss, vnet_loss, pnet_summaries, vnet_summaries

@@ -7,7 +7,7 @@ from inspect import getsourcefile
 import gym
 import tensorflow as tf
 
-from a3c.estimators import PolicyEstimator
+from a3c.estimators import PolicyEstimator, DynamicsEstimator
 from a3c.estimators import ValueEstimator
 from a3c.helpers import atari_make_initial_state
 from a3c.state_processor import StateProcessor
@@ -40,6 +40,7 @@ class WorkerTest(tf.test.TestCase):
         with tf.variable_scope("global") as vs:
             self.global_policy_net = PolicyEstimator(len(VALID_ACTIONS))
             self.global_value_net = ValueEstimator(reuse=True)
+            self.global_dynamics_net = DynamicsEstimator()
 
     def testPolicyNetPredict(self):
         w = Worker(
@@ -47,6 +48,7 @@ class WorkerTest(tf.test.TestCase):
             env=make_env(),
             policy_net=self.global_policy_net,
             value_net=self.global_value_net,
+            dynamics_net=self.global_dynamics_net,
             global_counter=self.global_counter,
             discount_factor=self.discount_factor)
 
@@ -63,6 +65,7 @@ class WorkerTest(tf.test.TestCase):
             env=make_env(),
             policy_net=self.global_policy_net,
             value_net=self.global_value_net,
+            dynamics_net=self.global_dynamics_net,
             global_counter=self.global_counter,
             discount_factor=self.discount_factor)
 
@@ -79,6 +82,7 @@ class WorkerTest(tf.test.TestCase):
             env=make_env(),
             policy_net=self.global_policy_net,
             value_net=self.global_value_net,
+            dynamics_net=self.global_dynamics_net,
             global_counter=self.global_counter,
             discount_factor=self.discount_factor)
 
