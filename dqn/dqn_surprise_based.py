@@ -199,7 +199,7 @@ class Agent():
     def get_action(self, state):
         if self.epsilon >= random.random() or self.t < INITIAL_REPLAY_SIZE:
             # Exploration
-            if not self.use_prediction:
+            if not self.use_prediction: # TODO change this?
                 # Random action in beginning
                 action = random.randrange(self.num_actions)
             else:
@@ -349,7 +349,7 @@ class Agent():
         episode_avg_loss = tf.Variable(0.)
         tf.summary.scalar(ENV_NAME + '/Average Loss/Episode', episode_avg_loss)
         avg_action_uncertainty = tf.Variable(0.)
-        tf.summary.scalar(ENV_NAME + '/Average action uncertainty/Episode', episode_avg_loss)
+        tf.summary.scalar(ENV_NAME + '/Average action uncertainty/Episode', avg_action_uncertainty)
         summary_vars = [episode_total_reward, episode_avg_max_q, episode_duration, episode_avg_loss, avg_action_uncertainty]
         summary_placeholders = [tf.placeholder(tf.float32) for _ in range(len(summary_vars))]
         update_ops = [summary_vars[i].assign(summary_placeholders[i]) for i in range(len(summary_vars))]
