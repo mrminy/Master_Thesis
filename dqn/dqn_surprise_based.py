@@ -30,7 +30,7 @@ EXPLORATION_STEPS = 1000000  # Number of steps over which the initial value of e
 INITIAL_EPSILON = 1.0  # Initial value of epsilon in epsilon-greedy
 FINAL_EPSILON = 0.1  # Final value of epsilon in epsilon-greedy
 INITIAL_REPLAY_SIZE = 20000  # Number of steps to populate the replay memory before training starts
-NUM_REPLAY_MEMORY = 200000  # Number of replay memory the agent uses for training
+NUM_REPLAY_MEMORY = 100000  # Number of replay memory the agent uses for training
 BATCH_SIZE = 32  # Mini batch size
 TARGET_UPDATE_INTERVAL = 10000  # The frequency with which the target network is updated
 TRAIN_INTERVAL = 4  # The agent selects 4 actions between successive updates
@@ -64,6 +64,7 @@ class Agent():
         self.duration = 0
         self.episode = 0
         self.avg_action_uncertainty = 0
+        self.std_action_uncertainty = 0
 
         # Create replay memory
         self.replay_memory = deque()
@@ -142,7 +143,7 @@ class Agent():
         return s, q_values, model
 
     def calculate_uncertainty_bonus(self, X_test):
-        T = 50
+        T = 10
         action_mean = []
         action_std = []
         for a in range(self.num_actions):
@@ -154,7 +155,7 @@ class Agent():
                 for i in range(0, T):
                     enumis.append(x_test)
             enumis = np.array(enumis)
-            prob = self.sess.run(self.predictor, feed_dict={self.predictor_x: enumis, self.keep_prob: 0.97})
+            prob = self.sess.run(self.predictor, feed_dict={self.predictor_x: enumis, self.keep_prob: 0.8})
             # Y_pred_reshaped = prob.reshape((len(X_test), self.z_shape))
             Y_pred_mean = np.mean(prob, axis=0)
             Y_pred_std = np.std(prob, axis=0)
@@ -169,7 +170,7 @@ class Agent():
 
         # print("Softmax:", action_std_softmax, "Pred STD:", action_std)
 
-        return action_std
+        return action_std * 2
 
     def build_training_op(self, q_network_weights):
         a = tf.placeholder(tf.int64, [None])
@@ -199,21 +200,39 @@ class Agent():
     def get_action(self, state):
         if self.epsilon >= random.random() or self.t < INITIAL_REPLAY_SIZE:
             # Exploration
-            if not self.use_prediction: # TODO change this?
+            #if not self.use_prediction: # TODO change this?
                 # Random action in beginning
-                action = random.randrange(self.num_actions)
-            else:
-                # Surprise-based exploration
-                converted_state = [np.float32(state / 255.0)]
-                q_values_actions = self.q_values.eval(feed_dict={self.s: converted_state})
-                uncertainty_values_actions = self.calculate_uncertainty_bonus(converted_state)
+            #    action = random.randrange(self.num_actions)
+            #else:
+            # Surprise-based exploration
+            converted_state = [np.float32(state / 255.0)]
+            q_values_actions = self.q_values.eval(feed_dict={self.s: converted_state})
+            uncertainty_values_actions = self.calculate_uncertainty_bonus(converted_state)
 
-                q_mean = np.mean(q_values_actions)
-                u_mean = np.mean(uncertainty_values_actions)
-                self.avg_action_uncertainty = u_mean
-                linear_transform_const = q_mean-u_mean
+            q_mean = np.mean(q_values_actions)
+            q_min = np.min(q_values_actions)
+            if q_min < 0:
+                q_values_actions = q_values_actions + q_min
+            q_values_actions = normalize(q_values_actions[:, np.newaxis], norm='l1', axis=0).ravel()
 
-                action = np.argmax(q_values_actions + 1 * (uncertainty_values_actions+linear_transform_const)) # 1 is exploration const TODO change to epsilon or something else
+            u_mean = np.mean(uncertainty_values_actions)
+            u_std = np.std(uncertainty_values_actions)
+            u_min = np.min(uncertainty_values_actions)
+            if u_min < 0:
+                uncertainty_values_actions = uncertainty_values_actions + u_min
+            self.avg_action_uncertainty = u_mean
+            self.std_action_uncertainty = u_std
+            #linear_transform_const = q_mean-u_mean
+
+
+            uncertainty_values_actions = normalize(uncertainty_values_actions[:, np.newaxis], norm='l1', axis=0).ravel()
+            surprise_bonus = (.5+self.epsilon) * uncertainty_values_actions # 1 is exploration const TODO change to epsilon or something else
+
+            if random.random() < 0.0001:
+                print(q_values_actions)
+                print(surprise_bonus)
+
+            action = np.argmax(q_values_actions + surprise_bonus)
         else:
             # Exploitation
             action = np.argmax(self.q_values.eval(feed_dict={self.s: [np.float32(state / 255.0)]}))
@@ -257,7 +276,7 @@ class Agent():
             # Write summary
             if self.t >= INITIAL_REPLAY_SIZE:
                 stats = [self.total_reward, self.total_q_max / float(self.duration),
-                         self.duration, self.total_loss / (float(self.duration) / float(TRAIN_INTERVAL)), self.avg_action_uncertainty]
+                         self.duration, self.total_loss / (float(self.duration) / float(TRAIN_INTERVAL)), self.avg_action_uncertainty, self.std_action_uncertainty]
                 for i in range(len(stats)):
                     self.sess.run(self.update_ops[i], feed_dict={self.summary_placeholders[i]: float(stats[i])})
                 summary_str = self.sess.run(self.summary_op)
@@ -282,6 +301,7 @@ class Agent():
             self.duration = 0
             self.episode += 1
             self.avg_action_uncertainty = 0
+            self.std_action_uncertainty = 0
 
         self.t += 1
 
@@ -350,7 +370,9 @@ class Agent():
         tf.summary.scalar(ENV_NAME + '/Average Loss/Episode', episode_avg_loss)
         avg_action_uncertainty = tf.Variable(0.)
         tf.summary.scalar(ENV_NAME + '/Average action uncertainty/Episode', avg_action_uncertainty)
-        summary_vars = [episode_total_reward, episode_avg_max_q, episode_duration, episode_avg_loss, avg_action_uncertainty]
+        std_action_uncertainty = tf.Variable(0.)
+        tf.summary.scalar(ENV_NAME + '/Std action uncertainty/Episode', std_action_uncertainty)
+        summary_vars = [episode_total_reward, episode_avg_max_q, episode_duration, episode_avg_loss, avg_action_uncertainty, std_action_uncertainty]
         summary_placeholders = [tf.placeholder(tf.float32) for _ in range(len(summary_vars))]
         update_ops = [summary_vars[i].assign(summary_placeholders[i]) for i in range(len(summary_vars))]
         summary_op = tf.summary.merge_all()
