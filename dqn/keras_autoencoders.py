@@ -28,27 +28,27 @@ def build_deep_autoencoder():
     return autoencoder
 
 
-def build_conv_combo_autoencoder():
+def build_conv_combo_autoencoder(z_shape):
     """
     Convolutional autoencoder with fc layers to the embedded space layer which is consists of 512 nodes
     """
-    input_img = Input(shape=(84, 84, 4))
+    input_img = Input(shape=(84, 84, 1))
 
     x = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='c1')(input_img)
     x = MaxPooling2D((2, 2), border_mode='same')(x)
     x = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='c2')(x)
     x = MaxPooling2D((3, 3), border_mode='same')(x)
     x = Flatten()(x)
-    encoded = Dense(512, activation='relu')(x)
+    encoded = Dense(z_shape, activation='relu')(x)
 
-    encoded_input = Input((512,))
+    encoded_input = Input((z_shape,))
     d1 = Dense(9408, activation='relu')(encoded_input)
     d2 = Reshape((14, 14, 48))(d1)
     d3 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='c5')(d2)
     d4 = UpSampling2D((3, 3))(d3)
     d5 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='c6')(d4)
     d6 = UpSampling2D((2, 2))(d5)
-    decoded = Convolution2D(4, 4, 4, activation='relu', border_mode='same', name='c9')(d6)
+    decoded = Convolution2D(1, 4, 4, activation='relu', border_mode='same', name='c9')(d6)
 
     encoder = Model(input=input_img, output=encoded, name='conv_encoder')
     decoder = Model(input=encoded_input, output=decoded, name='conv_decoder')
@@ -57,9 +57,9 @@ def build_conv_combo_autoencoder():
     autoencoder.add(encoder)
     autoencoder.add(decoder)
 
-    encoder.compile(optimizer='adam', loss='mse')
+    # encoder.compile(optimizer='adam', loss='mse')
+    # decoder.compile(optimizer='adam', loss='mse')
     encoder.summary()
-    decoder.compile(optimizer='adam', loss='mse')
     decoder.summary()
     autoencoder.compile(optimizer='adam', metrics=['mse'], loss='mse')
     autoencoder.summary()
@@ -156,31 +156,32 @@ def build_full_conv_autoencoder():
     return autoencoder
 
 
-def build_deep_predictor(state_size, action_size):
+def build_deep_predictor(input_size, action_size, output_size):
     """
     A fc transition prediction network that takes a compressed latent space and a one-hot vector of an action to predict
     the latent space for the next state
-    :param state_size: latent space size
+    :param input_size: latent vector size for observation
     :param action_size: number of valid actions
+    :param output_size: size of latent vector for one frame
     """
-    n_input = state_size+action_size
+    n_input = input_size + action_size
     n_hidden_1 = 1024
     n_hidden_2 = 1024
 
     x = tf.placeholder("float", [None, n_input])
-    y = tf.placeholder("float", [None, state_size])
+    y = tf.placeholder("float", [None, output_size])
     keep_prob = tf.placeholder(tf.float32)  # For dropout
 
     # Store layers weight & bias
     weights = {
         'h1': tf.Variable(tf.random_normal([n_input, n_hidden_1])),
         'h2': tf.Variable(tf.random_normal([n_hidden_1, n_hidden_2])),
-        'out': tf.Variable(tf.random_normal([n_hidden_2, state_size]))
+        'out': tf.Variable(tf.random_normal([n_hidden_2, output_size]))
     }
     biases = {
         'b1': tf.Variable(tf.random_normal([n_hidden_1])),
         'b2': tf.Variable(tf.random_normal([n_hidden_2])),
-        'out': tf.Variable(tf.random_normal([state_size]))
+        'out': tf.Variable(tf.random_normal([output_size]))
     }
 
     layer_1 = tf.add(tf.matmul(x, weights['h1']), biases['b1'])
@@ -199,18 +200,9 @@ def build_deep_predictor(state_size, action_size):
 
     return out_layer, loss_function, optimizer, keep_prob, x, y
 
-    # concated_input = Input(shape=(state_size + action_size,))
-    # output = Dense(1024, activation='relu', name='p_d1')(concated_input)
-    # output = Dense(1024, activation='relu', name='p_d2')(output)
-    # output = Dense(state_size, activation='relu', name='p_dout')(output)
-    #
-    # predictor = Model(input=concated_input, output=output, name='transition_model')
-    # predictor.compile(optimizer='adam', metrics=['mse'], loss='mse')
-    # predictor.summary()
-    # return predictor
 
-
-def encode_to_samples(encoder, X_train, actions, z_shape, num_actions, print_labels=True, split_inputs=False):
+def encode_to_samples(encoder, X_train, actions, z_shape, num_actions, concat_latent_vectors=True, print_labels=True,
+                      split_inputs=False):
     """
     Takes an encoder in and compresses X_train into latent representations and concatenates the representations with
     the selected action from actions.
@@ -221,8 +213,11 @@ def encode_to_samples(encoder, X_train, actions, z_shape, num_actions, print_lab
     :param split_inputs: if true --> concatenate actions with latent representation
     :return: training samples for the transition prediction model
     """
-    arr = encoder.predict(X_train)
-    arr = arr.reshape(len(X_train), z_shape)
+    pred = encoder.predict(X_train)
+    if concat_latent_vectors:
+        arr = pred.reshape(int(len(X_train) / 4), int(z_shape * 4))
+    else:
+        arr = pred.reshape(len(X_train), z_shape)
     a_one_hot = np.eye(num_actions)[actions]
     if print_labels:
         if not split_inputs:
@@ -230,7 +225,10 @@ def encode_to_samples(encoder, X_train, actions, z_shape, num_actions, print_lab
             x_samples = x_samples[:-1]
         else:
             x_samples = arr[:-1]
-        y_samples = arr[1:len(arr)]
+        if concat_latent_vectors:
+            y_samples = pred[4::4]  # Grabs every 4'th element from the list starting from element number 5 (first frame for 1+n frames)
+        else:
+            y_samples = arr[1:len(arr)]
         return np.array(x_samples), np.array(y_samples)
     else:
         if not split_inputs:
@@ -253,7 +251,8 @@ def train_predictor(predictor, X_train, Y_train, nb_epoch=5, batch_size=32):
     return np.mean(history.history['loss'])
 
 
-def train_autoencoder(autoencoder, X_train, X_test, nb_epoch=5, batch_size=32, nb_batches=None, nb_examples=0, verbose=2):
+def train_autoencoder(autoencoder, X_train, X_test, nb_epoch=5, batch_size=32, nb_batches=None, nb_examples=0,
+                      verbose=2):
     """
     Trains an autoencoder
     """

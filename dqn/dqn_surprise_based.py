@@ -16,7 +16,7 @@ from keras.models import Sequential
 from keras.layers import Convolution2D, Flatten, Dense
 from sklearn.preprocessing import normalize
 from keras_autoencoders import build_full_conv_autoencoder_new, plot_images, encode_to_samples, build_deep_predictor, \
-    train_autoencoder
+    train_autoencoder, build_conv_combo_autoencoder
 
 ENV_NAME = 'Pong-v0'  # Environment name
 # ENV_NAME = 'MontezumaRevenge-v0'  # Environment name
@@ -46,8 +46,8 @@ SAVE_SUMMARY_PATH = 'summary/' + ENV_NAME + '_surprise'
 NUM_EPISODES_AT_TEST = 30  # Number of episodes the agent plays at test time
 
 UPDATE_DYNAMICS_MODEL = 0.05  # Probability for updating the dynamics model
-UPDATE_PREDICTION_MODEL_THRESHOLD = 0.001  # Loss threshold from autoencoder for updating the prediction model
-Z_SHAPE = 1024
+UPDATE_PREDICTION_MODEL_THRESHOLD = 0.0001  # Loss threshold from autoencoder for updating the prediction model
+Z_SHAPE = 256  # Shape for one single frame
 
 
 class Agent():
@@ -71,9 +71,10 @@ class Agent():
 
         # Create dynamics model
         self.z_shape = Z_SHAPE
-        self.autoencoder, self.encoder, self.decoder = build_full_conv_autoencoder_new(self.z_shape)
+        # self.autoencoder, self.encoder, self.decoder = build_full_conv_autoencoder_new(self.z_shape)
+        self.autoencoder, self.encoder, self.decoder = build_conv_combo_autoencoder(self.z_shape)
         self.predictor, self.predictor_loss_function, self.predictor_optimizer, self.keep_prob, self.predictor_x, self.predictor_y = build_deep_predictor(
-            self.z_shape, num_actions)
+            self.z_shape * 4, num_actions, self.z_shape)  # x4 for 4 frames concatenated
         self.use_prediction = False
 
         # Create q network
@@ -119,10 +120,11 @@ class Agent():
         for data in minibatch:
             state_batch.append(data[0])
             action_batch.append(data[1])
-        x_batch = np.float32(np.array(state_batch) / 255.0).reshape(2, 84, 84, 4)
+        x_batch = np.float32(np.array(state_batch) / 255.0).reshape(8, 84, 84, 1)
         autoencoder_result = self.autoencoder.predict(x_batch, batch_size=BATCH_SIZE)
-        x_batch = x_batch.reshape(8, 84, 84, 1)
-        autoencoder_result = autoencoder_result.reshape(8, 84, 84, 1)
+        print("Actions in plot:", action_batch)
+        # x_batch = x_batch.reshape(8, 84, 84, 1)
+        # autoencoder_result = autoencoder_result.reshape(8, 84, 84, 1)
         plot_images(x_batch, autoencoder_result, nb_examples=8)
 
     def build_network(self):
@@ -132,7 +134,7 @@ class Agent():
         model.add(Convolution2D(64, 4, 4, subsample=(2, 2), border_mode='same', activation='relu'))
         model.add(Convolution2D(64, 3, 3, subsample=(1, 1), border_mode='same', activation='relu'))
         model.add(Flatten())
-        model.add(Dense(512, activation='relu'))
+        model.add(Dense(512, activation='relu'))  # TODO use this as the base for the autoencoder?
         model.add(Dense(self.num_actions))
 
         model.summary()
@@ -148,14 +150,14 @@ class Agent():
         action_std = []
         for a in range(self.num_actions):
             encoded_concatenated_vec = encode_to_samples(self.encoder,
-                                                         np.array(X_test).reshape((len(X_test), 84, 84, 4)),
+                                                         np.array(X_test).reshape((len(X_test) * 4, 84, 84, 1)),
                                                          [a], self.z_shape, self.num_actions, print_labels=False)
             enumis = []
             for x_test in encoded_concatenated_vec:
                 for i in range(0, T):
                     enumis.append(x_test)
             enumis = np.array(enumis)
-            prob = self.sess.run(self.predictor, feed_dict={self.predictor_x: enumis, self.keep_prob: 0.8})
+            prob = self.sess.run(self.predictor, feed_dict={self.predictor_x: enumis, self.keep_prob: 0.9})
             # Y_pred_reshaped = prob.reshape((len(X_test), self.z_shape))
             Y_pred_mean = np.mean(prob, axis=0)
             Y_pred_std = np.std(prob, axis=0)
@@ -198,41 +200,42 @@ class Agent():
         return np.stack(state, axis=0)
 
     def get_action(self, state):
-        if self.epsilon >= random.random() or self.t < INITIAL_REPLAY_SIZE:
-            # Exploration
-            #if not self.use_prediction: # TODO change this?
-                # Random action in beginning
-            #    action = random.randrange(self.num_actions)
-            #else:
+        if self.t < INITIAL_REPLAY_SIZE:
+            # Random action in beginning
+            return random.randrange(self.num_actions)
+
+        if self.epsilon >= random.random():
             # Surprise-based exploration
             converted_state = [np.float32(state / 255.0)]
-            q_values_actions = self.q_values.eval(feed_dict={self.s: converted_state})
+            q_values_actions = self.q_values.eval(feed_dict={self.s: converted_state})[0]
             uncertainty_values_actions = self.calculate_uncertainty_bonus(converted_state)
 
-            q_mean = np.mean(q_values_actions)
+            # q_mean = np.mean(q_values_actions)
             q_min = np.min(q_values_actions)
             if q_min < 0:
-                q_values_actions = q_values_actions + q_min
+                q_values_actions = q_values_actions + abs(q_min)
             q_values_actions = normalize(q_values_actions[:, np.newaxis], norm='l1', axis=0).ravel()
 
-            u_mean = np.mean(uncertainty_values_actions)
-            u_std = np.std(uncertainty_values_actions)
             u_min = np.min(uncertainty_values_actions)
             if u_min < 0:
                 uncertainty_values_actions = uncertainty_values_actions + u_min
-            self.avg_action_uncertainty = u_mean
-            self.std_action_uncertainty = u_std
-            #linear_transform_const = q_mean-u_mean
-
+            # linear_transform_const = q_mean-u_mean
 
             uncertainty_values_actions = normalize(uncertainty_values_actions[:, np.newaxis], norm='l1', axis=0).ravel()
-            surprise_bonus = (.5+self.epsilon) * uncertainty_values_actions # 1 is exploration const TODO change to epsilon or something else
+            surprise_bonus = uncertainty_values_actions * pow(self.epsilon, 0.5)  # * (.5 + self.epsilon)
+            u_mean = np.mean(surprise_bonus)
+            u_std = np.std(surprise_bonus)
+            self.avg_action_uncertainty = u_mean
+            self.std_action_uncertainty = u_std
 
-            if random.random() < 0.0001:
-                print(q_values_actions)
-                print(surprise_bonus)
+            final_action_values = q_values_actions + surprise_bonus
 
-            action = np.argmax(q_values_actions + surprise_bonus)
+            if random.random() < 0.0002:
+                print("Q:", q_values_actions)
+                print("S:", surprise_bonus)
+                print("V:", final_action_values)
+
+            action = np.argmax(final_action_values)
         else:
             # Exploitation
             action = np.argmax(self.q_values.eval(feed_dict={self.s: [np.float32(state / 255.0)]}))
@@ -276,7 +279,8 @@ class Agent():
             # Write summary
             if self.t >= INITIAL_REPLAY_SIZE:
                 stats = [self.total_reward, self.total_q_max / float(self.duration),
-                         self.duration, self.total_loss / (float(self.duration) / float(TRAIN_INTERVAL)), self.avg_action_uncertainty, self.std_action_uncertainty]
+                         self.duration, self.total_loss / (float(self.duration) / float(TRAIN_INTERVAL)),
+                         self.avg_action_uncertainty, self.std_action_uncertainty]
                 for i in range(len(stats)):
                     self.sess.run(self.update_ops[i], feed_dict={self.summary_placeholders[i]: float(stats[i])})
                 summary_str = self.sess.run(self.summary_op)
@@ -343,14 +347,15 @@ class Agent():
 
         if random.random() < UPDATE_DYNAMICS_MODEL:
             # Update autoencoder
-            x_batch = x_batch.reshape((BATCH_SIZE, 84, 84, 4))
+            x_batch = x_batch.reshape((BATCH_SIZE * 4, 84, 84, 1))
             max_loss = train_autoencoder(self.autoencoder, x_batch, None, batch_size=BATCH_SIZE, nb_epoch=1, verbose=0)
             predictor_loss = None
             if max_loss < UPDATE_PREDICTION_MODEL_THRESHOLD:
                 # Update prediction model
                 self.use_prediction = True
                 predictor_x, predictor_y = encode_to_samples(self.encoder, x_batch, action_batch, self.z_shape,
-                                                             self.num_actions, split_inputs=False)
+                                                             self.num_actions, split_inputs=False,
+                                                             concat_latent_vectors=True)
                 predictor_loss, _ = self.sess.run([self.predictor_loss_function, self.predictor_optimizer],
                                                   feed_dict={self.predictor_x: predictor_x,
                                                              self.predictor_y: predictor_y, self.keep_prob: 0.97})
@@ -372,7 +377,8 @@ class Agent():
         tf.summary.scalar(ENV_NAME + '/Average action uncertainty/Episode', avg_action_uncertainty)
         std_action_uncertainty = tf.Variable(0.)
         tf.summary.scalar(ENV_NAME + '/Std action uncertainty/Episode', std_action_uncertainty)
-        summary_vars = [episode_total_reward, episode_avg_max_q, episode_duration, episode_avg_loss, avg_action_uncertainty, std_action_uncertainty]
+        summary_vars = [episode_total_reward, episode_avg_max_q, episode_duration, episode_avg_loss,
+                        avg_action_uncertainty, std_action_uncertainty]
         summary_placeholders = [tf.placeholder(tf.float32) for _ in range(len(summary_vars))]
         update_ops = [summary_vars[i].assign(summary_placeholders[i]) for i in range(len(summary_vars))]
         summary_op = tf.summary.merge_all()
