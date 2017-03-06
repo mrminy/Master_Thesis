@@ -60,8 +60,11 @@ class DynamicsEstimator:
         X = tf.to_float(self.states) / 255.
         # batch_size = tf.shape(self.states)[0]
 
+        # Graph shared with Value Net
+        with tf.variable_scope("shared", reuse=reuse):
+            self.encoder = build_shared_network(X, add_summaries=(not reuse))  # 256 latent space
+
         with tf.variable_scope("dynamics_net"):
-            self.encoder = build_shared_network(X, add_summaries=(not reuse))
             self.decoder = build_decoder(self.encoder, tf.shape(self.states), add_summaries=(not reuse))
             # We add entropy to the loss to encourage exploration
             # self.entropy = -tf.reduce_sum(self.probs * tf.log(self.probs), 1, name="entropy")
@@ -73,11 +76,20 @@ class DynamicsEstimator:
 
             # self.losses = - (tf.log(self.picked_action_probs) * self.targets + 0.01 * self.entropy)
             # self.loss = tf.reduce_sum(self.losses, name="loss")
+            self.predictions = {
+                "encode": self.encoder,
+                "decode": self.decoder
+            }
             self.cost = tf.reduce_mean(tf.square(X - self.decoder), name="cost")
 
             tf.summary.scalar(self.cost.op.name, self.cost)
-            self.optimizer = tf.train.AdamOptimizer() #.minimize(self.cost)
+            # self.optimizer = tf.train.AdamOptimizer() #.minimize(self.cost)
+            # self.grads_and_vars = self.optimizer.compute_gradients(self.cost)
+            # self.grads_and_vars = [[grad, var] for grad, var in self.grads_and_vars if grad is not None]
+            # self.train_op = self.optimizer.apply_gradients(self.grads_and_vars,
+            #                                                global_step=tf.contrib.framework.get_global_step())
 
+            self.optimizer = tf.train.RMSPropOptimizer(0.00025, 0.99, 0.0, 1e-6)
             self.grads_and_vars = self.optimizer.compute_gradients(self.cost)
             self.grads_and_vars = [[grad, var] for grad, var in self.grads_and_vars if grad is not None]
             self.train_op = self.optimizer.apply_gradients(self.grads_and_vars,

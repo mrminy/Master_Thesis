@@ -1,11 +1,12 @@
 """
 Modified surprise-based exploration version of DQN from https://github.com/tatsuyaokubo/dqn
 """
-
+import csv
 import os
 import gym
 import random
 import numpy as np
+import pickle
 import tensorflow as tf
 from collections import deque
 
@@ -30,7 +31,7 @@ EXPLORATION_STEPS = 1000000  # Number of steps over which the initial value of e
 INITIAL_EPSILON = 1.0  # Initial value of epsilon in epsilon-greedy
 FINAL_EPSILON = 0.1  # Final value of epsilon in epsilon-greedy
 INITIAL_REPLAY_SIZE = 20000  # Number of steps to populate the replay memory before training starts
-NUM_REPLAY_MEMORY = 100000  # Number of replay memory the agent uses for training
+NUM_REPLAY_MEMORY = 200000  # Number of replay memory the agent uses for training
 BATCH_SIZE = 32  # Mini batch size
 TARGET_UPDATE_INTERVAL = 10000  # The frequency with which the target network is updated
 TRAIN_INTERVAL = 4  # The agent selects 4 actions between successive updates
@@ -47,6 +48,7 @@ NUM_EPISODES_AT_TEST = 30  # Number of episodes the agent plays at test time
 
 UPDATE_DYNAMICS_MODEL = 0.05  # Probability for updating the dynamics model
 UPDATE_PREDICTION_MODEL_THRESHOLD = 0.0001  # Loss threshold from autoencoder for updating the prediction model
+PREDICTOR_LOSS_THRESHOLD = 20.0  # Loss threshold from the prediction network before using surprise-based exploration
 Z_SHAPE = 256  # Shape for one single frame
 
 
@@ -65,6 +67,7 @@ class Agent():
         self.episode = 0
         self.avg_action_uncertainty = 0
         self.std_action_uncertainty = 0
+        self.reward_history = []
 
         # Create replay memory
         self.replay_memory = deque()
@@ -145,7 +148,7 @@ class Agent():
         return s, q_values, model
 
     def calculate_uncertainty_bonus(self, X_test):
-        T = 10
+        T = 20
         action_mean = []
         action_std = []
         for a in range(self.num_actions):
@@ -200,7 +203,7 @@ class Agent():
         return np.stack(state, axis=0)
 
     def get_action(self, state):
-        if self.t < INITIAL_REPLAY_SIZE:
+        if self.t < INITIAL_REPLAY_SIZE or not self.use_prediction:
             # Random action in beginning
             return random.randrange(self.num_actions)
 
@@ -222,7 +225,7 @@ class Agent():
             # linear_transform_const = q_mean-u_mean
 
             uncertainty_values_actions = normalize(uncertainty_values_actions[:, np.newaxis], norm='l1', axis=0).ravel()
-            surprise_bonus = uncertainty_values_actions * pow(self.epsilon, 0.5)  # * (.5 + self.epsilon)
+            surprise_bonus = uncertainty_values_actions * pow(self.epsilon, 0.3)  # 0.3 could be a exploration constant
             u_mean = np.mean(surprise_bonus)
             u_std = np.std(surprise_bonus)
             self.avg_action_uncertainty = u_mean
@@ -232,6 +235,7 @@ class Agent():
 
             if random.random() < 0.0002:
                 print("Q:", q_values_actions)
+                print("U:", uncertainty_values_actions)
                 print("S:", surprise_bonus)
                 print("V:", final_action_values)
 
@@ -298,6 +302,7 @@ class Agent():
                     self.episode + 1, self.t, self.duration, self.epsilon,
                     self.total_reward, self.total_q_max / float(self.duration),
                     self.total_loss / (float(self.duration) / float(TRAIN_INTERVAL)), mode))
+            self.reward_history.append([self.t, self.total_reward])
 
             self.total_reward = 0
             self.total_q_max = 0
@@ -352,21 +357,24 @@ class Agent():
             predictor_loss = None
             if max_loss < UPDATE_PREDICTION_MODEL_THRESHOLD:
                 # Update prediction model
-                self.use_prediction = True
                 predictor_x, predictor_y = encode_to_samples(self.encoder, x_batch, action_batch, self.z_shape,
                                                              self.num_actions, split_inputs=False,
                                                              concat_latent_vectors=True)
                 predictor_loss, _ = self.sess.run([self.predictor_loss_function, self.predictor_optimizer],
                                                   feed_dict={self.predictor_x: predictor_x,
-                                                             self.predictor_y: predictor_y, self.keep_prob: 0.97})
-                # prediction_loss = train_predictor(self.predictor, predictor_x, predictor_y, nb_epoch=1,
-                #                                   batch_size=BATCH_SIZE)
+                                                             self.predictor_y: predictor_y, self.keep_prob: 0.9})
+                if not self.use_prediction and predictor_loss < PREDICTOR_LOSS_THRESHOLD:
+                    self.use_prediction = True
+                    # prediction_loss = train_predictor(self.predictor, predictor_x, predictor_y, nb_epoch=1,
+                    #                                   batch_size=BATCH_SIZE)
             if random.random() < 0.05:
                 print("Autoencoder max-loss:", max_loss, "Prediction loss:", predictor_loss)
 
     def setup_summary(self):
         episode_total_reward = tf.Variable(0.)
         tf.summary.scalar(ENV_NAME + '/Total Reward/Episode', episode_total_reward)
+        # timestep_reward = tf.Variable(0.)
+        # tf.summary.scalar(ENV_NAME + '/Total Reward/Timestep', timestep_reward)
         episode_avg_max_q = tf.Variable(0.)
         tf.summary.scalar(ENV_NAME + '/Average Max Q/Episode', episode_avg_max_q)
         episode_duration = tf.Variable(0.)
@@ -431,6 +439,10 @@ def main():
                 state = agent.run(state, action, reward, terminal, processed_observation)
         print("Used training time:", time.time() - training_time_start)
         agent.plot_examples()
+        pickle.dump(agent.reward_history, open("reward_history.pickle", "wb"))
+        with open("reward_history.csv", "wb") as f:
+            writer = csv.writer(f)
+            writer.writerows(agent.reward_history)
     else:  # Test mode
         # env.monitor.start(ENV_NAME + '-test')
         for _ in range(NUM_EPISODES_AT_TEST):

@@ -85,7 +85,7 @@ class Worker(object):
         with tf.variable_scope(name):
             self.policy_net = PolicyEstimator(policy_net.num_outputs)
             self.value_net = ValueEstimator(reuse=True)
-            self.dynamics_net = DynamicsEstimator()
+            self.dynamics_net = DynamicsEstimator(reuse=True)
 
         # Op to copy params from global policy/valuenets
         self.copy_params_op = make_copy_params_op(

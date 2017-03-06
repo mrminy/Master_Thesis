@@ -7,6 +7,12 @@ This is the code repository for my thesis.
 - A3C implementation with the surprise-based exploration method (running Atari games)
 
 #### TODO
+##### TODO Architecture
+- Try using the compressed latent space from the CNN in the DQN/A3C
+- Try to take the difference between frame 1 and frame 4 and feed it to the autoencoder
+- Try to make a decoder that decodes the latent space from the CNN in the DQN/A3C. Prediction net can then use one of the first layers in the decoder.
+- Try with different dropout rate for the prediction network (0.05 --> from the Deep PILCO paper)
+
 ##### TODO DQN
 - Implement prioritized experience replay (dynamics model will benefit from this as well)
 - Implement saving of images from the autoencoder (and possibly the prediction model) during a run
