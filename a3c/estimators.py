@@ -56,6 +56,8 @@ class DynamicsEstimator:
         # Integer id of which action was selected
         # self.actions = tf.placeholder(shape=[None], dtype=tf.int32, name="actions")
 
+        self.num_outputs = 4
+
         # Normalize
         X = tf.to_float(self.states) / 255.
         # batch_size = tf.shape(self.states)[0]

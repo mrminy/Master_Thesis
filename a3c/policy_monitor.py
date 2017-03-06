@@ -6,7 +6,7 @@ from inspect import getsourcefile
 import numpy as np
 import tensorflow as tf
 
-from a3c.estimators import PolicyEstimator
+from a3c.estimators import PolicyEstimator, DynamicsEstimator
 from a3c.helpers import atari_make_initial_state, atari_make_next_state
 from a3c.state_processor import StateProcessor
 from a3c.worker import make_copy_params_op
@@ -29,9 +29,10 @@ class PolicyMonitor(object):
       summary_writer: a tf.train.SummaryWriter used to write Tensorboard summaries
     """
 
-    def __init__(self, env, policy_net, summary_writer, saver=None):
+    def __init__(self, env, policy_net, dynamics_net, summary_writer, saver=None):
         self.env = env
         self.global_policy_net = policy_net
+        self.global_dynamics_net = dynamics_net
         self.summary_writer = summary_writer
         self.saver = saver
         self.sp = StateProcessor()
@@ -48,6 +49,8 @@ class PolicyMonitor(object):
         # Local policy net
         with tf.variable_scope("policy_eval"):
             self.policy_net = PolicyEstimator(policy_net.num_outputs)
+            self.dynamics_net = DynamicsEstimator(dynamics_net.num_outputs)
+
 
         # Op to copy params from global policy/value net parameters
         self.copy_params_op = make_copy_params_op(
