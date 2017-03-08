@@ -29,6 +29,7 @@ def make_copy_params_op(v1_list, v2_list):
     v1_list = list(sorted(v1_list, key=lambda v: v.name))
     v2_list = list(sorted(v2_list, key=lambda v: v.name))
 
+
     update_ops = []
     for v1, v2 in zip(v1_list, v2_list):
         op = v2.assign(v1)
@@ -225,7 +226,7 @@ class Worker(object):
         if self.summary_writer is not None:
             self.summary_writer.add_summary(pnet_summaries, global_step)
             self.summary_writer.add_summary(vnet_summaries, global_step)
-            # self.summary_writer.add_summary(dynamics_cost, global_step)
+            self.summary_writer.add_summary(dnet_summaries, global_step)
             self.summary_writer.flush()
 
         return pnet_loss, vnet_loss, pnet_summaries, vnet_summaries
