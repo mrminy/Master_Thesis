@@ -93,11 +93,9 @@ class ActorLearner(Process):
         
 
     def run(self):
-        config = tf.ConfigProto(device_count={'GPU': 0})
-        self.session = tf.Session(config=config)
-#         self.session = tf.Session(config=tf.ConfigProto(
-#              inter_op_parallelism_threads=1,
-#              intra_op_parallelism_threads=1))
+        # config = tf.ConfigProto(device_count={'GPU': 0})
+        # self.session = tf.Session(config=config)
+        self.session = tf.Session()
 
         if (self.actor_id==0):
             #Initizlize Tensorboard summaries

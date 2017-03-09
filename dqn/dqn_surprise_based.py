@@ -20,18 +20,19 @@ from keras_autoencoders import build_full_conv_autoencoder_new, plot_images, enc
     train_autoencoder, build_conv_combo_autoencoder
 
 ENV_NAME = 'Pong-v0'  # Environment name
+# ENV_NAME = 'Freeway-v0'  # Environment name
 # ENV_NAME = 'MontezumaRevenge-v0'  # Environment name
 FRAME_WIDTH = 84  # Resized frame width
 FRAME_HEIGHT = 84  # Resized frame height
-NUM_EPISODES = 4000  # Number of episodes the agent plays
+NUM_EPISODES = 8000  # Number of episodes the agent plays
 # TODO might change this to abort on timesteps
 STATE_LENGTH = 4  # Number of most recent frames to produce the input to the network
 GAMMA = 0.99  # Discount factor
 EXPLORATION_STEPS = 1000000  # Number of steps over which the initial value of epsilon is linearly annealed to its final value
 INITIAL_EPSILON = 1.0  # Initial value of epsilon in epsilon-greedy
 FINAL_EPSILON = 0.1  # Final value of epsilon in epsilon-greedy
-INITIAL_REPLAY_SIZE = 20000  # Number of steps to populate the replay memory before training starts
-NUM_REPLAY_MEMORY = 200000  # Number of replay memory the agent uses for training
+INITIAL_REPLAY_SIZE = 50000  # Number of steps to populate the replay memory before training starts
+NUM_REPLAY_MEMORY = 300000  # Number of replay memory the agent uses for training
 BATCH_SIZE = 32  # Mini batch size
 TARGET_UPDATE_INTERVAL = 10000  # The frequency with which the target network is updated
 TRAIN_INTERVAL = 4  # The agent selects 4 actions between successive updates
@@ -47,7 +48,7 @@ SAVE_SUMMARY_PATH = 'summary/' + ENV_NAME + '_surprise'
 NUM_EPISODES_AT_TEST = 30  # Number of episodes the agent plays at test time
 
 UPDATE_DYNAMICS_MODEL = 0.05  # Probability for updating the dynamics model
-UPDATE_PREDICTION_MODEL_THRESHOLD = 0.0001  # Loss threshold from autoencoder for updating the prediction model
+UPDATE_PREDICTION_MODEL_THRESHOLD = 0.001  # Loss threshold from autoencoder for updating the prediction model
 PREDICTOR_LOSS_THRESHOLD = 20.0  # Loss threshold from the prediction network before using surprise-based exploration
 Z_SHAPE = 256  # Shape for one single frame
 
@@ -225,7 +226,7 @@ class Agent():
             # linear_transform_const = q_mean-u_mean
 
             uncertainty_values_actions = normalize(uncertainty_values_actions[:, np.newaxis], norm='l1', axis=0).ravel()
-            surprise_bonus = uncertainty_values_actions * pow(self.epsilon, 0.3)  # 0.3 could be a exploration constant
+            surprise_bonus = uncertainty_values_actions * pow(self.epsilon, 0.3)  # 0.3 is an exploration constant
             u_mean = np.mean(surprise_bonus)
             u_std = np.std(surprise_bonus)
             self.avg_action_uncertainty = u_mean

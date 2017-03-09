@@ -15,18 +15,18 @@ from skimage.transform import resize
 from keras.models import Sequential
 from keras.layers import Convolution2D, Flatten, Dense
 
-# ENV_NAME = 'Pong-v0'  # Environment name
-ENV_NAME = 'MontezumaRevenge-v0'  # Environment name
+ENV_NAME = 'Pong-v0'  # Environment name
+# ENV_NAME = 'Freeway-v0'  # Environment name
 FRAME_WIDTH = 84  # Resized frame width
 FRAME_HEIGHT = 84  # Resized frame height
-NUM_EPISODES = 500  # Number of episodes the agent plays
+NUM_EPISODES = 8000  # Number of episodes the agent plays
 # TODO might change this to abort on timesteps
 STATE_LENGTH = 4  # Number of most recent frames to produce the input to the network
 GAMMA = 0.99  # Discount factor
 EXPLORATION_STEPS = 1000000  # Number of steps over which the initial value of epsilon is linearly annealed to its final value
 INITIAL_EPSILON = 1.0  # Initial value of epsilon in epsilon-greedy
 FINAL_EPSILON = 0.1  # Final value of epsilon in epsilon-greedy
-INITIAL_REPLAY_SIZE = 20000  # Number of steps to populate the replay memory before training starts
+INITIAL_REPLAY_SIZE = 50000  # Number of steps to populate the replay memory before training starts
 NUM_REPLAY_MEMORY = 200000  # Number of replay memory the agent uses for training
 BATCH_SIZE = 32  # Mini batch size
 TARGET_UPDATE_INTERVAL = 10000  # The frequency with which the target network is updated
@@ -185,7 +185,7 @@ class Agent():
                         self.summary_placeholders[i]: float(stats[i])
                     })
                 summary_str = self.sess.run(self.summary_op)
-                self.summary_writer.add_summary(summary_str, self.episode + 1)
+                self.summary_writer.add_summary(summary_str, self.t)
 
             # Debug
             if self.t < INITIAL_REPLAY_SIZE:
