@@ -22,3 +22,10 @@ This is the code repository for my thesis.
 
 ##### TODO A3C
 - Implement my architecture for surprise-based exploration
+
+##### A3C traai requirements
+- scikit-image
+- cython
+- gym[all]
+- tensorflow
+- matplotlib
