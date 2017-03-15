@@ -53,6 +53,7 @@ def get_network_and_environment_creator(args, random_seed=3):
 
 def get_arg_parser():
     parser = argparse.ArgumentParser()
+    #montezuma_revenge
     parser.add_argument('-g', default='pong', help='Name of game', dest='game')
     parser.add_argument('-d', '--device', default='/gpu:0', type=str, help="Device to be used ('/cpu:0', /gpu:0, /gpu:1,...)", dest="device")
     parser.add_argument('--rom_path', default='/home/mikkel/ALE_roms/', help='Directory where the game roms are located (needed for ALE environment)', dest="rom_path")

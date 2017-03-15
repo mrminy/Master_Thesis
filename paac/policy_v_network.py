@@ -80,7 +80,7 @@ class PolicyVDNetwork(Network):
             with tf.name_scope(self.name):
                 self.critic_target_ph = tf.placeholder("float32", [None], name='target')
                 self.adv_actor_ph = tf.placeholder("float", [None], name='advantage')
-                self.dynamics_latent_target = tf.placeholder("float32", [None, self.latent_size], name='dynamics_latent_target')
+                self.dynamics_latent_target = tf.placeholder("float32", [None, self.latent_shape*4], name='dynamics_latent_target')
 
                 # Final actor layer
                 layer_name = 'actor_output'
@@ -92,9 +92,11 @@ class PolicyVDNetwork(Network):
                 self.log_output_layer_pi = tf.log(tf.add(self.output_layer_pi, tf.constant(1e-30)),
                                                   name=layer_name + '_log_policy')
 
-                # Dynamics output TODO find uncertainty in dynamics model and make training ops for dynamics model
+                # Dynamics model ops TODO find uncertainty in dynamics model and make training ops for dynamics model
                 self.dynamics_loss = tf.reduce_mean(tf.pow(tf.subtract(self.dynamics_latent_target, self.latent_prediction), 2))
                 self.dynamics_optimizer = tf.train.AdamOptimizer().minimize(self.dynamics_loss)
+                self.autoencoder_loss = tf.reduce_mean(tf.pow(tf.subtract(self.autoencoder_input, self.autoencoder_output), 2))
+                self.autoencoder_optimizer = tf.train.AdamOptimizer().minimize(self.autoencoder_loss)
 
                 # Entropy: sum_a (-p_a ln p_a)
                 self.output_layer_entropy = tf.reduce_sum(
