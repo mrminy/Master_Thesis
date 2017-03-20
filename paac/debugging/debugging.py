@@ -154,7 +154,7 @@ class StatsViewer:
         ax.get_yaxis().tick_left()
         ax.set_xlabel(headers[2])
         ax.set_xlabel(x_name)
-        ax.set_ylabel('Step')
+        ax.set_ylabel('Reward')
         asarray = np.asarray(series[y_name]['data'])
         moving_std = self.moving_std(asarray)[::subsample]
         moving_average = self.moving_average(asarray)[::subsample]

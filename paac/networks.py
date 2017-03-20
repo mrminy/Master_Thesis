@@ -1,7 +1,10 @@
 import tensorflow as tf
 import logging
 import numpy as np
+from keras.engine import Input
+from keras.engine import Model
 from keras.layers import Convolution2D, MaxPooling2D, Flatten, Dense, Reshape, UpSampling2D
+from keras.models import Sequential
 
 
 def flatten(_input):
@@ -113,13 +116,15 @@ class Network(object):
         self.device = conf['device']
 
         # Vars used in dynamics model
-        self.latent_shape = 256
+        self.latent_shape = 128
         self.keep_prob = tf.placeholder(tf.float32)  # For dropout
         self.dynamics_input = None
         self.autoencoder_input_ph = None
         self.autoencoder_input = None
         self.autoencoder_output = None
         self.encoder_output = None
+        self.decoder_output = None
+        self.decoder_input = None
         self.latent_prediction = None
 
         with tf.device(self.device):
@@ -131,6 +136,7 @@ class Network(object):
 
                 self.autoencoder_input_ph = tf.placeholder(tf.uint8, [None, 84, 84, 1], name='autoencoder_input')
                 self.autoencoder_input = tf.scalar_mul(1.0 / 255.0, tf.cast(self.autoencoder_input_ph, tf.float32))
+                self.decoder_input = tf.placeholder(tf.float32, [None, self.latent_shape], name='decoder_input')
 
                 # This class should never be used, must be subclassed
 
@@ -196,52 +202,56 @@ class DynamicsNetwork(Network):
 
         with tf.device(self.device):
             with tf.name_scope(self.name):
-                # Regular NIPS network
-                _, _, conv1 = conv2d('conv1', self.input, 32, 8, 4, 4)
-                _, _, conv2 = conv2d('conv2', conv1, 64, 4, 32, 2)
-                _, _, conv3 = conv2d('conv3', conv2, 64, 3, 64, 1)
-                _, _, fc4 = fc('fc4', flatten(conv3), self.latent_shape, activation="relu")
-                self.output = fc4
+                # NIPS network
+                _, _, conv1 = conv2d('conv1', self.input, 16, 8, 4, 4)
+                _, _, conv2 = conv2d('conv2', conv1, 32, 4, 16, 2)
+                _, _, fc3 = fc('fc3', flatten(conv2), 256, activation="relu")
+                self.output = fc3
 
                 # Encoder
-                # _, _, enc_conv1 = conv2d('enc_conv1', self.input, 48, 4, 1, 1)  # cahnnels = 1?
-                # enc_conv1 = maxpool2d('enc_maxpool2d1', enc_conv1, 2)
-                # _, _, enc_conv2 = conv2d('enc_conv2', enc_conv1, 48, 4, 1, 1)
-                # enc_conv2 = maxpool2d('enc_maxpool2d2', enc_conv2, 3)
-                # _, _, enc_fc3 = fc('enc_fc3', flatten(enc_conv2), self.latent_size, activation="relu")
-                # self.encoder_output = enc_fc3
-                x = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='c1')(self.autoencoder_input)
-                x = MaxPooling2D((2, 2), border_mode='same')(x)
-                x = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='c2')(x)
-                x = MaxPooling2D((3, 3), border_mode='same')(x)
-                x = Dense(self.latent_shape, activation='relu')(flatten(x))
-                self.encoder_output = x
+                e1 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='e1')(self.autoencoder_input)
+                e2 = MaxPooling2D((2, 2), border_mode='same', name='e2')(e1)
+                e3 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='e3')(e2)
+                e4 = MaxPooling2D((3, 3), border_mode='same', name='e4')(e3)
+                e5 = Dense(self.latent_shape, activation='relu', name='e5')(flatten(e4))
+                self.encoder_output = e5
 
                 # Decoder
-                d1 = Dense(9408, activation='relu')(self.encoder_output)
-                d2 = Reshape((14, 14, 48))(d1)
-                d3 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='c5')(d2)
-                d4 = UpSampling2D((3, 3))(d3)
-                d5 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='c6')(d4)
-                d6 = UpSampling2D((2, 2))(d5)
-                self.autoencoder_output = Convolution2D(1, 4, 4, activation='relu', border_mode='same', name='c9')(d6)
+                d1 = Dense(9408, activation='relu', name='d1')
+                d2 = Reshape((14, 14, 48), name='d2')
+                d3 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='d3')
+                d4 = UpSampling2D((3, 3), name='d4')
+                d5 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='d5')
+                d6 = UpSampling2D((2, 2), name='d6')
+                d7 = Convolution2D(1, 4, 4, activation='relu', border_mode='same', name='d7')
+
+                # Full autoencoder
+                d1_full = d1(self.encoder_output)
+                d2_full = d2(d1_full)
+                d3_full = d3(d2_full)
+                d4_full = d4(d3_full)
+                d5_full = d5(d4_full)
+                d6_full = d6(d5_full)
+                d7_full = d7(d6_full)
+
+                # Only decoding
+                d1_decoder = d1(self.decoder_input)
+                d2_decoder = d2(d1_decoder)
+                d3_decoder = d3(d2_decoder)
+                d4_decoder = d4(d3_decoder)
+                d5_decoder = d5(d4_decoder)
+                d6_decoder = d6(d5_decoder)
+                d7_decoder = d7(d6_decoder)
+
+                self.decoder_output = d7_decoder
+                self.autoencoder_output = d7_full
 
                 # Prediction on latent space
                 self.dynamics_input = tf.placeholder("float32", [None, self.latent_shape * 4 + self.num_actions],
                                                      name="transition_prediction_input")
-                _, _, pred1 = fc('pred1', self.dynamics_input, 1024)
+                _, _, pred1 = fc('pred1', self.dynamics_input, 512)
                 pred1 = tf.nn.dropout(pred1, keep_prob=self.keep_prob, name='pred1_drop')
-                _, _, pred2 = fc('pred2', pred1, 1024)
+                _, _, pred2 = fc('pred2', pred1, 512)
                 pred2 = tf.nn.dropout(pred2, keep_prob=self.keep_prob, name='pred2_drop')
-                _, _, pred3 = fc('pred3', pred2, self.latent_shape * 4)
+                _, _, pred3 = fc('pred3', pred2, self.latent_shape)
                 self.latent_prediction = pred3
-
-                # Decoder
-                # _, _, dec_fc1 = fc('dec_fc1', enc_fc3, 9408, activation="relu")
-                # _, _, dec_conv1 = conv2d('enc_conv1', dec_fc1.reshape(14, 14, 48), 48, 4, 1, 1)
-                # dec_conv1 = tf.nn.pool('enc_maxpool2d1', enc_conv1, 2)
-                # _, _, enc_conv2 = conv2d('enc_conv2', enc_conv1, 48, 4, 1, 1)
-                # enc_conv2 = maxpool2d('enc_maxpool2d2', enc_conv2, 3)
-                # _, _, enc_fc3 = fc('enc_fc3', flatten(enc_conv2), self.latent_size, activation="relu")
-                # self.encoder_output = enc_fc3
-                # self.autoencoder_output = deconv4

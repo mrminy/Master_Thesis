@@ -80,7 +80,7 @@ class PolicyVDNetwork(Network):
             with tf.name_scope(self.name):
                 self.critic_target_ph = tf.placeholder("float32", [None], name='target')
                 self.adv_actor_ph = tf.placeholder("float", [None], name='advantage')
-                self.dynamics_latent_target = tf.placeholder("float32", [None, self.latent_shape*4], name='dynamics_latent_target')
+                self.dynamics_latent_target = tf.placeholder("float32", [None, self.latent_shape], name='dynamics_latent_target')
 
                 # Final actor layer
                 layer_name = 'actor_output'
