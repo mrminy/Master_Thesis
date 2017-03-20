@@ -27,8 +27,8 @@ class PAACLearner(ActorLearner):
         self.stats_logger = custom_logging.StatsLogger(logger_config, subfolder=args.debugging_folder)
 
         self.initial_exploration_constant = 1.
-        self.exploration_constant_min = 0.1
-        self.exploration_discount = 1 / 4000000
+        self.exploration_constant_min = 0.0
+        self.exploration_discount = 1. / 6000000.
 
     @staticmethod
     def choose_next_actions(network, num_actions, states, emulator_counts, session):
