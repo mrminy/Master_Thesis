@@ -1,4 +1,3 @@
-import random
 import time
 from multiprocessing import Queue
 from multiprocessing.sharedctypes import RawArray
@@ -8,7 +7,7 @@ from sklearn.preprocessing import normalize
 
 from actor_learner import *
 import logging
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 from emulator_runner import EmulatorRunner
 import numpy as np
 import custom_logging
@@ -359,7 +358,7 @@ class PAACLearner(ActorLearner):
         org_imgs = flat_autoencoder_states[0][:n_imgs]
         feed_dict = {self.network.autoencoder_input_ph: org_imgs}
         autoencoder_predict = self.session.run(self.network.autoencoder_output, feed_dict=feed_dict)
-        plot_autoencoder_examples(org_imgs, autoencoder_predict, nb_examples=n_imgs)
+        # plot_autoencoder_examples(org_imgs, autoencoder_predict, nb_examples=n_imgs)
 
         # Plot decoder
         # org_latent_vars = [latent_vars[0][0], latent_vars[0][1]]
@@ -385,31 +384,31 @@ class PAACLearner(ActorLearner):
         predicted_images = self.session.run(self.network.decoder_output, feed_dict=feed_dict)
 
         next_images = org_imgs[4::4]
-        plot_autoencoder_examples(next_images, predicted_images[:-1], nb_examples=n_imgs)
+        # plot_autoencoder_examples(next_images, predicted_images[:-1], nb_examples=n_imgs)
 
 
-def plot_autoencoder_examples(org_images, predicted_images, nb_examples=10):
-    n = nb_examples
-
-    org_images = np.reshape(org_images, (n, 84, 84))
-    predicted_images = np.reshape(predicted_images, (n, 84, 84))
-
-    plt.figure(figsize=(nb_examples * 2, 4))
-    for i in range(n):
-        # display original
-        ax = plt.subplot(2, n, i + 1)
-        plt.imshow(org_images[i])  # .reshape(84, 84))
-        # plt.imshow(X_test[i])
-        plt.gray()
-        ax.get_xaxis().set_visible(False)
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
-
-        # display reconstruction
-        ax = plt.subplot(2, n, i + 1 + n)
-        plt.imshow(predicted_images[i])  # .reshape(84, 84))
-        # plt.imshow(decoded_imgs[i])
-        plt.gray()
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
-    plt.show()
+# def plot_autoencoder_examples(org_images, predicted_images, nb_examples=10):
+#     n = nb_examples
+#
+#     org_images = np.reshape(org_images, (n, 84, 84))
+#     predicted_images = np.reshape(predicted_images, (n, 84, 84))
+#
+#     plt.figure(figsize=(nb_examples * 2, 4))
+#     for i in range(n):
+#         # display original
+#         ax = plt.subplot(2, n, i + 1)
+#         plt.imshow(org_images[i])  # .reshape(84, 84))
+#         # plt.imshow(X_test[i])
+#         plt.gray()
+#         ax.get_xaxis().set_visible(False)
+#         ax.get_xaxis().set_visible(False)
+#         ax.get_yaxis().set_visible(False)
+#
+#         # display reconstruction
+#         ax = plt.subplot(2, n, i + 1 + n)
+#         plt.imshow(predicted_images[i])  # .reshape(84, 84))
+#         # plt.imshow(decoded_imgs[i])
+#         plt.gray()
+#         ax.get_xaxis().set_visible(False)
+#         ax.get_yaxis().set_visible(False)
+#     plt.show()
