@@ -66,7 +66,7 @@ def get_arg_parser():
     parser.add_argument('--clip_norm', default=40, type=float, help="If clip_norm_type is local/global, grads will be clipped at the specified maximum (avaerage) L2-norm", dest="clip_norm")
     parser.add_argument('--clip_norm_type', default="global", help="Whether to clip grads by their norm or not. Values: ignore (no clipping), local (layer-wise norm), global (global norm)", dest="clip_norm_type")
     parser.add_argument('--gamma', default=0.99, type=float, help="Discount factor", dest="gamma")
-    parser.add_argument('--max_global_steps', default=80000000, type=int, help="Max. number of training steps", dest="max_global_steps")
+    parser.add_argument('--max_global_steps', default=40000000, type=int, help="Max. number of training steps", dest="max_global_steps")
     parser.add_argument('--max_local_steps', default=5, type=int, help="Number of steps to gain experience from before every update for the Q learning/A3C algorithm", dest="max_local_steps")
     parser.add_argument('--arch', default='SURP', help="Which network architecture to use: from the NIPS, NATURE paper or SURP (for surprise-based exploration)", dest="arch")
     parser.add_argument('--single_life_episodes', default=False, type=bool_arg, help="If True, training episodes will be terminated when a life is lost (for games)", dest="single_life_episodes")

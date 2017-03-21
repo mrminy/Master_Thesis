@@ -27,7 +27,7 @@ class PAACLearner(ActorLearner):
         self.stats_logger = custom_logging.StatsLogger(logger_config, subfolder=args.debugging_folder)
 
         self.initial_exploration_constant = 1.
-        self.exploration_constant_min = 0.0
+        self.exploration_constant_min = 0.01
         self.exploration_discount = 1. / 6000000.
 
     @staticmethod
@@ -85,23 +85,24 @@ class PAACLearner(ActorLearner):
             """
 
         action_uncertainties = normalize(np.array(action_uncertainties).transpose(), norm='l1', axis=1)
-        if action_uncertainties.std() > 0.:
-            action_uncertainties = (action_uncertainties - action_uncertainties.mean()) * exploration_const
+        action_uncertainties = (action_uncertainties - action_uncertainties.mean()) * exploration_const
 
-            network_output_pi_w_surprise = np.clip(np.add(network_output_pi, action_uncertainties), 0., 1.)
-
+        # if action_uncertainties.std() > 0.:
+        #     network_output_pi_w_surprise = np.clip(np.add(network_output_pi, action_uncertainties), 0., 1.)
+        #
             # Probability matching
-            action_indices = PAACLearner.__boltzmann(normalize(network_output_pi_w_surprise, norm='l1', axis=1))
-
-            if random.random() < 0.0007:
-                print("output_pi:", network_output_pi[0], "\nUncertainties", action_uncertainties[0],
-                      "\noutput_pi_surprise:", network_output_pi_w_surprise[0])
-        else:
-            # Regular boltzmann if there is no uncertainty
-            action_indices = PAACLearner.__boltzmann(network_output_pi)
+            # action_indices = PAACLearner.__boltzmann(normalize(network_output_pi_w_surprise, norm='l1', axis=1))
+            #
+            # if random.random() < 0.0007:
+            #     print("output_pi:", network_output_pi[0], "\nUncertainties", action_uncertainties[0],
+            #           "\noutput_pi_surprise:", network_output_pi_w_surprise[0])
+        # else:
+        #   # Regular boltzmann if there is no uncertainty
+            # action_indices = PAACLearner.__boltzmann(network_output_pi)
 
         # UCB TODO try this
-        # action_indices = PAACLearner.__ucb1(network_output_pi_w_surprise)
+        network_output_pi_w_surprise = np.add(network_output_pi, action_uncertainties)
+        action_indices = PAACLearner.__ucb1(network_output_pi_w_surprise)
 
         new_actions = np.eye(num_actions)[action_indices]
 
