@@ -214,6 +214,10 @@ class DynamicsNetwork(Network):
                 e3 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='e3')(e2)
                 e4 = MaxPooling2D((3, 3), border_mode='same', name='e4')(e3)
                 e5 = Dense(self.latent_shape, activation='relu', name='e5')(flatten(e4))
+                # _, _, e1 = conv2d('e1', self.autoencoder_input, 32, 8, 4, 4)
+                # _, _, e2 = conv2d('e2', e1, 64, 4, 32, 2)
+                # _, _, e3 = conv2d('e3', e2, 64, 3, 64, 1)
+                # _, _, e4 = fc('e4', flatten(e3), self.latent_shape, activation="relu")
                 self.encoder_output = e5
 
                 # Decoder
