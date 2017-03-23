@@ -319,7 +319,7 @@ class PAACLearner(ActorLearner):
                                 (global_steps - global_step_start) / (curr_time - start_time),
                                 last_ten, dynamics_loss, autoencoder_loss, std_action_uncertainty))
 
-            if counter % (2048 / self.emulator_counts) == 0:
+            if counter % (20480 / self.emulator_counts) == 0:
                 self.do_plotting(flat_autoencoder_states, flat_actions)
 
             self.save_vars()
