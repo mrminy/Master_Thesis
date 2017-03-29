@@ -116,7 +116,7 @@ class Network(object):
         self.device = conf['device']
 
         # Vars used in dynamics model
-        self.latent_shape = 128
+        self.latent_shape = 64
         self.keep_prob = tf.placeholder(tf.float32)  # For dropout
         self.dynamics_input = None
         self.autoencoder_input_ph = None
@@ -221,8 +221,16 @@ class DynamicsNetwork(Network):
                 self.encoder_output = e5
 
                 # Decoder
-                d1 = Dense(9408, activation='relu', name='d1')
-                d2 = Reshape((14, 14, 48), name='d2')
+                # d1 = Dense(3136, activation='relu', name='d1')
+                # d2 = Reshape((14, 14, 16), name='d2')
+                # d3 = e3
+                # d4 = UpSampling2D((3, 3), name='d4')
+                # d5 = e1
+                # d6 = UpSampling2D((2, 2), name='d6')
+                # d7 = Convolution2D(1, 4, 4, activation='relu', border_mode='same', name='d7')
+
+                d1 = Dense(3136, activation='relu', name='d1')
+                d2 = Reshape((14, 14, 16), name='d2')
                 d3 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='d3')
                 d4 = UpSampling2D((3, 3), name='d4')
                 d5 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='d5')
@@ -251,11 +259,11 @@ class DynamicsNetwork(Network):
                 self.autoencoder_output = d7_full
 
                 # Prediction on latent space
-                self.dynamics_input = tf.placeholder("float32", [None, self.latent_shape * 4 + self.num_actions],
+                self.dynamics_input = tf.placeholder("float32", [None, self.latent_shape + self.num_actions],
                                                      name="transition_prediction_input")
-                _, _, pred1 = fc('pred1', self.dynamics_input, 512)
+                _, _, pred1 = fc('pred1', self.dynamics_input, 256)
                 pred1 = tf.nn.dropout(pred1, keep_prob=self.keep_prob, name='pred1_drop')
-                _, _, pred2 = fc('pred2', pred1, 512)
+                _, _, pred2 = fc('pred2', pred1, 256)
                 pred2 = tf.nn.dropout(pred2, keep_prob=self.keep_prob, name='pred2_drop')
                 _, _, pred3 = fc('pred3', pred2, self.latent_shape)
                 self.latent_prediction = pred3
