@@ -317,7 +317,7 @@ class PAACLearner(ActorLearner):
                                   self.stats_logger.get_stats_for_array(value_discrepancy), dynamics_loss,
                                   autoencoder_loss, mean_action_uncertainty, std_action_uncertainty)
 
-            if counter % (20480 / self.emulator_counts) == 0:
+            if counter % (2048 / self.emulator_counts) == 0:
                 curr_time = time.time()
                 global_steps = self.global_step
                 last_ten = 0.0 if len(total_rewards) < 1 else np.mean(total_rewards[-10:])
@@ -328,7 +328,7 @@ class PAACLearner(ActorLearner):
                                 (global_steps - global_step_start) / (curr_time - start_time),
                                 last_ten, dynamics_loss, autoencoder_loss, std_action_uncertainty))
 
-            if counter % (2048 / self.emulator_counts) == 0:
+            if counter % (20480 / self.emulator_counts) == 0:
                 self.do_plotting()
 
             self.save_vars()
