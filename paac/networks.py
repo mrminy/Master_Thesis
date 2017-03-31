@@ -116,7 +116,7 @@ class Network(object):
         self.device = conf['device']
 
         # Vars used in dynamics model
-        self.latent_shape = 64
+        self.latent_shape = 128
         self.keep_prob = tf.placeholder(tf.float32)  # For dropout
         self.dynamics_input = None
         self.autoencoder_input_ph = None
@@ -211,7 +211,7 @@ class DynamicsNetwork(Network):
                 # Encoder
                 e1 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='e1')(self.autoencoder_input)
                 e2 = MaxPooling2D((2, 2), border_mode='same', name='e2')(e1)
-                e3 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='e3')(e2)
+                e3 = Convolution2D(64, 2, 2, activation='relu', border_mode='same', name='e3')(e2)
                 e4 = MaxPooling2D((3, 3), border_mode='same', name='e4')(e3)
                 e5 = Dense(self.latent_shape, activation='relu', name='e5')(flatten(e4))
                 # _, _, e1 = conv2d('e1', self.autoencoder_input, 32, 8, 4, 4)
@@ -233,7 +233,7 @@ class DynamicsNetwork(Network):
                 d2 = Reshape((14, 14, 16), name='d2')
                 d3 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='d3')
                 d4 = UpSampling2D((3, 3), name='d4')
-                d5 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='d5')
+                d5 = Convolution2D(64, 2, 2, activation='relu', border_mode='same', name='d5')
                 d6 = UpSampling2D((2, 2), name='d6')
                 d7 = Convolution2D(1, 4, 4, activation='relu', border_mode='same', name='d7')
 

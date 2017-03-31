@@ -57,7 +57,7 @@ def get_arg_parser():
     #breakout
     #qbert
     #montezuma_revenge
-    parser.add_argument('-g', default='breakout', help='Name of game', dest='game')
+    parser.add_argument('-g', default='montezuma_revenge', help='Name of game', dest='game')
     parser.add_argument('-d', '--device', default='/gpu:0', type=str, help="Device to be used ('/cpu:0', /gpu:0, /gpu:1,...)", dest="device")
     parser.add_argument('--rom_path', default='/home/mikkel/ALE_roms/', help='Directory where the game roms are located (needed for ALE environment)', dest="rom_path")
     parser.add_argument('-v', '--visualize', default=False, type=bool_arg, help="0: no visualization of emulator; 1: all emulators, for all actors, are visualized; 2: only 1 emulator (for one of the actors) is visualized", dest="visualize")
