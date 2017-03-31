@@ -80,7 +80,8 @@ class PolicyVDNetwork(Network):
             with tf.name_scope(self.name):
                 self.critic_target_ph = tf.placeholder("float32", [None], name='target')
                 self.adv_actor_ph = tf.placeholder("float", [None], name='advantage')
-                self.dynamics_latent_target = tf.placeholder("float32", [None, self.latent_shape], name='dynamics_latent_target')
+                self.dynamics_latent_target = tf.placeholder("float32", [None, self.latent_shape],
+                                                             name='dynamics_latent_target')
 
                 # Final actor layer
                 layer_name = 'actor_output'
@@ -93,14 +94,20 @@ class PolicyVDNetwork(Network):
                                                   name=layer_name + '_log_policy')
 
                 # Dynamics model ops TODO find uncertainty in dynamics model and make training ops for dynamics model
-                self.dynamics_loss = tf.reduce_mean(tf.pow(tf.subtract(self.dynamics_latent_target, self.latent_prediction), 2))
+                latent_diff = tf.subtract(self.dynamics_latent_target, self.dynamics_input)
+                self.dynamics_loss = tf.reduce_mean(tf.pow(tf.subtract(latent_diff, self.latent_prediction), 2))
                 self.dynamics_optimizer = tf.train.AdamOptimizer().minimize(self.dynamics_loss)
 
                 # Autoencoder model ops
-                self.autoencoder_movement_focus_input_ph = tf.placeholder(tf.uint8, [None, 84, 84, 1], name='focus_autoencoder_input')
-                self.autoencoder_movement_focus_input = tf.pow(tf.add(tf.scalar_mul(1.0 / 255.0, tf.cast(self.autoencoder_movement_focus_input_ph, tf.float32)), 1.0), 5.0)
+                self.autoencoder_movement_focus_input_ph = tf.placeholder(tf.uint8, [None, 84, 84, 1],
+                                                                          name='focus_autoencoder_input')
+                self.autoencoder_movement_focus_input = tf.pow(
+                    tf.add(tf.scalar_mul(1.0 / 255.0, tf.cast(self.autoencoder_movement_focus_input_ph, tf.float32)),
+                           1.0), 5.0)
                 # self.autoencoder_loss = tf.reduce_mean(tf.pow(tf.subtract(self.autoencoder_input, self.autoencoder_output), 2))
-                self.autoencoder_loss = tf.reduce_mean(tf.pow(tf.multiply(tf.subtract(self.autoencoder_input, self.autoencoder_output),self.autoencoder_movement_focus_input), 2))
+                self.autoencoder_loss = tf.reduce_mean(tf.pow(
+                    tf.multiply(tf.subtract(self.autoencoder_input, self.autoencoder_output),
+                                self.autoencoder_movement_focus_input), 2))
                 # self.autoencoder_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.autoencoder_output, labels=self.autoencoder_input))
                 # self.autoencoder_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.autoencoder_input, logits=self.autoencoder_output))
                 # cross_entropy = -tf.reduce_mean(self.autoencoder_input * tf.log(self.autoencoder_output))

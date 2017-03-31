@@ -118,7 +118,10 @@ class Network(object):
         # Vars used in dynamics model
         self.latent_shape = 128
         self.keep_prob = tf.placeholder(tf.float32)  # For dropout
-        self.dynamics_input = None
+        self.dynamics_input = tf.placeholder("float32", [None, self.latent_shape],
+                                             name="latent_input")
+        self.action_input = tf.placeholder("float32", [None, self.num_actions],
+                                             name="action_input")
         self.autoencoder_input_ph = None
         self.autoencoder_input = None
         self.autoencoder_output = None
@@ -259,9 +262,8 @@ class DynamicsNetwork(Network):
                 self.autoencoder_output = d7_full
 
                 # Prediction on latent space
-                self.dynamics_input = tf.placeholder("float32", [None, self.latent_shape + self.num_actions],
-                                                     name="transition_prediction_input")
-                _, _, pred1 = fc('pred1', self.dynamics_input, 256)
+                prediction_input = tf.concat([self.dynamics_input, self.action_input], axis=1, name='prediction_input_concat')
+                _, _, pred1 = fc('pred1', prediction_input, 256)
                 pred1 = tf.nn.dropout(pred1, keep_prob=self.keep_prob, name='pred1_drop')
                 _, _, pred2 = fc('pred2', pred1, 256)
                 pred2 = tf.nn.dropout(pred2, keep_prob=self.keep_prob, name='pred2_drop')
