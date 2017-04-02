@@ -54,21 +54,25 @@ class PAACLearner(ActorLearner):
     @staticmethod
     def choose_next_actions_surprise(network, num_actions, states, emulator_counts, session, exploration_const):
         autoencoder_states = states[:, :, :, 3].reshape(32, 84, 84, 1)
+        autoencoder_states_prev = states[:, :, :, 2].reshape(32, 84, 84, 1)
         # autoencoder_states = np.reshape(states.transpose(0, 3, 1, 2), (emulator_counts * 4, 84, 84, 1))
 
         network_output_v, network_output_pi, network_latent_var = session.run(
             [network.output_layer_v, network.output_layer_pi, network.encoder_output],
             feed_dict={network.input_ph: states, network.autoencoder_input_ph: autoencoder_states})
 
+        network_latent_var_prev = session.run(network.encoder_output,
+                                              feed_dict={network.autoencoder_input_ph: autoencoder_states_prev})
+
         # TODO try to do the next 15 lines in tensorflow on the gpu
         T = 30  # number of stochastic forward passes
-        flat_latent_var_four_frames = network_latent_var  # .reshape(emulator_counts, network.latent_shape * 4)
+        latent_repeat = np.repeat(network_latent_var, T, axis=0)
+        prev_latent_repeat = np.repeat(network_latent_var_prev, T, axis=0)
         action_uncertainties = []
         for a in range(num_actions):
             action_repeat = np.repeat([np.eye(num_actions)[a]], T * emulator_counts, axis=0)
-            latent_repeat = np.repeat(flat_latent_var_four_frames, T, axis=0)
-            feed_dict = {network.keep_prob: .9, network.dynamics_input: latent_repeat,
-                         network.action_input: action_repeat}
+            feed_dict = {network.keep_prob: .9, network.dynamics_input_prev: prev_latent_repeat,
+                         network.dynamics_input: latent_repeat, network.action_input: action_repeat}
             transition_predictions = session.run(network.latent_prediction, feed_dict=feed_dict)
             transition_predictions = transition_predictions.reshape(emulator_counts, T, network.latent_shape)
             action_uncertainties.append(np.mean(np.std(transition_predictions, axis=1) * 2, axis=1))
@@ -117,7 +121,7 @@ class PAACLearner(ActorLearner):
 
         new_actions = np.eye(num_actions)[action_indices]
 
-        return new_actions, network_output_v, network_output_pi, flat_latent_var_four_frames, action_uncertainties
+        return new_actions, network_output_v, network_output_pi, network_latent_var, action_uncertainties
 
     def __choose_next_actions(self, states):
         # TODO check if network is using surprise exploration architecture
@@ -353,10 +357,14 @@ class PAACLearner(ActorLearner):
                     [self.network.autoencoder_optimizer, self.network.autoencoder_loss, self.network.encoder_output],
                     feed_dict=feed_dict)
 
+                feed_dict = {self.network.autoencoder_input_ph: minibatch_prev_frames}
+                prev_latent_vars = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
+
                 feed_dict = {self.network.autoencoder_input_ph: minibatch_next_frames}
                 next_latent_vars = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
 
-                feed_dict = {self.network.dynamics_input: latent_vars,
+                feed_dict = {self.network.dynamics_input_prev: prev_latent_vars,
+                             self.network.dynamics_input: latent_vars,
                              self.network.action_input: minibatch_actions,
                              self.network.dynamics_latent_target: next_latent_vars,
                              self.network.keep_prob: .9}
@@ -383,17 +391,20 @@ class PAACLearner(ActorLearner):
                                   save_fig=save_imgs,
                                   save_path=self.debugging_folder + '/autoencoder_imgs/' + str(self.global_step))
 
+        prev_latent_vars = self.session.run(self.network.encoder_output,
+                                            feed_dict={self.network.autoencoder_input_ph: minibatch_prev_frames})
+
         # Plot transition prediction
         # feed_dict = {self.network.autoencoder_input_ph: minibatch_next_frames}
         # dynamics_target = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
 
-        feed_dict = {self.network.dynamics_input: latent_vars, self.network.action_input: minibatch_actions,
-                     self.network.keep_prob: 1.}
+        feed_dict = {self.network.dynamics_input_prev: prev_latent_vars, self.network.dynamics_input: latent_vars,
+                     self.network.action_input: minibatch_actions, self.network.keep_prob: 1.}
         predicted_vars = self.session.run(self.network.latent_prediction, feed_dict=feed_dict)
         predicted_vars = np.add(latent_vars, predicted_vars)
 
-        feed_dict = {self.network.dynamics_input: latent_vars, self.network.action_input: minibatch_actions,
-                     self.network.keep_prob: .9}
+        feed_dict = {self.network.dynamics_input_prev: prev_latent_vars, self.network.dynamics_input: latent_vars,
+                     self.network.action_input: minibatch_actions, self.network.keep_prob: .9}
         predicted_vars_dropout = self.session.run(self.network.latent_prediction, feed_dict=feed_dict)
         predicted_vars_dropout = np.add(latent_vars, predicted_vars_dropout)
 
@@ -410,7 +421,9 @@ class PAACLearner(ActorLearner):
 
         possible_actions = np.eye(self.num_actions)
         repeated_latent_var = np.repeat(latent_vars, self.num_actions, axis=0)[:self.num_actions]
-        feed_dict = {self.network.dynamics_input: repeated_latent_var, self.network.action_input: possible_actions,
+        prev_repeated_latent_var = np.repeat(prev_latent_vars, self.num_actions, axis=0)[:self.num_actions]
+        feed_dict = {self.network.dynamics_input_prev: prev_repeated_latent_var,
+                     self.network.dynamics_input: repeated_latent_var, self.network.action_input: possible_actions,
                      self.network.keep_prob: 1.}
         predicted_vars = self.session.run(self.network.latent_prediction, feed_dict=feed_dict)
         # dynamics_target = np.repeat(minibatch_next_frames[0], self.num_actions, axis=2).transpose(2, 0, 1)

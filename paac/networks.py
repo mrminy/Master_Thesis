@@ -122,8 +122,10 @@ class Network(object):
         self.keep_prob = tf.placeholder(tf.float32)  # For dropout
         self.dynamics_input = tf.placeholder("float32", [None, self.latent_shape],
                                              name="latent_input")
+        self.dynamics_input_prev = tf.placeholder("float32", [None, self.latent_shape],
+                                                  name="latent_input_prev")
         self.action_input = tf.placeholder("float32", [None, self.num_actions],
-                                             name="action_input")
+                                           name="action_input")
         self.autoencoder_input_ph = None
         self.autoencoder_input = None
         self.autoencoder_output = None
@@ -264,10 +266,11 @@ class DynamicsNetwork(Network):
                 self.autoencoder_output = d7_full
 
                 # Prediction on latent space
-                prediction_input = tf.concat([self.dynamics_input, self.action_input], axis=1, name='prediction_input_concat')
-                _, _, pred1 = fc('pred1', prediction_input, 256, activation="tanh")
+                prediction_input = tf.concat([self.dynamics_input_prev, self.dynamics_input, self.action_input], axis=1,
+                                             name='prediction_input_concat')
+                _, _, pred1 = fc('pred1', prediction_input, 500, activation="tanh")
                 pred1 = tf.nn.dropout(pred1, keep_prob=self.keep_prob, name='pred1_drop')
-                _, _, pred2 = fc('pred2', pred1, 256, activation="tanh")
+                _, _, pred2 = fc('pred2', pred1, 500, activation="tanh")
                 pred2 = tf.nn.dropout(pred2, keep_prob=self.keep_prob, name='pred2_drop')
                 _, _, pred3 = fc('pred3', pred2, self.latent_shape, activation="tanh")
                 self.latent_prediction = pred3
