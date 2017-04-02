@@ -62,6 +62,8 @@ def fc(name, _input, output_dim, activation="relu", init="torch"):
 
     if activation == "relu":
         out = tf.nn.relu(out, name='' + name + '_relu')
+    elif activation == "tanh":
+        out = tf.nn.tanh(out, name='' + name + '_tanh')
 
     return w, b, out
 
@@ -263,9 +265,9 @@ class DynamicsNetwork(Network):
 
                 # Prediction on latent space
                 prediction_input = tf.concat([self.dynamics_input, self.action_input], axis=1, name='prediction_input_concat')
-                _, _, pred1 = fc('pred1', prediction_input, 256)
+                _, _, pred1 = fc('pred1', prediction_input, 256, activation="tanh")
                 pred1 = tf.nn.dropout(pred1, keep_prob=self.keep_prob, name='pred1_drop')
-                _, _, pred2 = fc('pred2', pred1, 256)
+                _, _, pred2 = fc('pred2', pred1, 256, activation="tanh")
                 pred2 = tf.nn.dropout(pred2, keep_prob=self.keep_prob, name='pred2_drop')
-                _, _, pred3 = fc('pred3', pred2, self.latent_shape)
+                _, _, pred3 = fc('pred3', pred2, self.latent_shape, activation="tanh")
                 self.latent_prediction = pred3

@@ -96,7 +96,7 @@ class PAACLearner(ActorLearner):
             """
 
         action_uncertainties = normalize(np.array(action_uncertainties).transpose(), norm='l1', axis=1)
-        action_uncertainties = (action_uncertainties - action_uncertainties.mean()) * exploration_const
+        action_uncertainties = (action_uncertainties - action_uncertainties.mean())  # * exploration_const
 
         if action_uncertainties.std() > 0.:
             network_output_pi_w_surprise = np.clip(np.add(network_output_pi, action_uncertainties), 0., 1.)
@@ -378,34 +378,43 @@ class PAACLearner(ActorLearner):
         feed_dict = {self.network.autoencoder_input_ph: minibatch_curr_frames}
         autoencoder_predict, latent_vars = self.session.run(
             [self.network.autoencoder_output, self.network.encoder_output], feed_dict=feed_dict)
-        plot_autoencoder_examples([minibatch_curr_frames, autoencoder_predict], nb_examples=n_imgs, show_plot=not save_imgs,
+        plot_autoencoder_examples([minibatch_curr_frames, autoencoder_predict], nb_examples=n_imgs,
+                                  show_plot=not save_imgs,
                                   save_fig=save_imgs,
                                   save_path=self.debugging_folder + '/autoencoder_imgs/' + str(self.global_step))
 
         # Plot transition prediction
-        feed_dict = {self.network.autoencoder_input_ph: minibatch_next_frames}
-        dynamics_target = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
+        # feed_dict = {self.network.autoencoder_input_ph: minibatch_next_frames}
+        # dynamics_target = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
 
         feed_dict = {self.network.dynamics_input: latent_vars, self.network.action_input: minibatch_actions,
                      self.network.keep_prob: 1.}
         predicted_vars = self.session.run(self.network.latent_prediction, feed_dict=feed_dict)
         predicted_vars = np.add(latent_vars, predicted_vars)
 
+        feed_dict = {self.network.dynamics_input: latent_vars, self.network.action_input: minibatch_actions,
+                     self.network.keep_prob: .9}
+        predicted_vars_dropout = self.session.run(self.network.latent_prediction, feed_dict=feed_dict)
+        predicted_vars_dropout = np.add(latent_vars, predicted_vars_dropout)
+
         feed_dict = {self.network.decoder_input: predicted_vars}
         predicted_images = self.session.run(self.network.decoder_output, feed_dict=feed_dict)
 
-        plot_autoencoder_examples([minibatch_curr_frames, minibatch_next_frames, predicted_images], nb_examples=n_imgs,
-                                  show_plot=not save_imgs,
-                                  save_fig=save_imgs,
-                                  save_path=self.debugging_folder + '/dynamics_imgs/' + str(self.global_step))
+        feed_dict = {self.network.decoder_input: predicted_vars_dropout}
+        predicted_images_dropout = self.session.run(self.network.decoder_output, feed_dict=feed_dict)
+
+        plot_autoencoder_examples(
+            [minibatch_curr_frames, minibatch_next_frames, predicted_images, predicted_images_dropout],
+            nb_examples=n_imgs, show_plot=not save_imgs, save_fig=save_imgs,
+            save_path=self.debugging_folder + '/dynamics_imgs/' + str(self.global_step))
 
         possible_actions = np.eye(self.num_actions)
         repeated_latent_var = np.repeat(latent_vars, self.num_actions, axis=0)[:self.num_actions]
         feed_dict = {self.network.dynamics_input: repeated_latent_var, self.network.action_input: possible_actions,
                      self.network.keep_prob: 1.}
         predicted_vars = self.session.run(self.network.latent_prediction, feed_dict=feed_dict)
-        dynamics_target = np.repeat(minibatch_next_frames[0], self.num_actions, axis=2).transpose(2, 0, 1)
-        predicted_vars = np.add(latent_vars, predicted_vars)
+        # dynamics_target = np.repeat(minibatch_next_frames[0], self.num_actions, axis=2).transpose(2, 0, 1)
+        predicted_vars = np.add(repeated_latent_var, predicted_vars)
 
         feed_dict = {self.network.decoder_input: predicted_vars}
         predicted_images = self.session.run(self.network.decoder_output, feed_dict=feed_dict)
