@@ -10,6 +10,7 @@ class StatsViewer:
         self.configs = configs
         self.col_index = 0
         self.window_size = args.window_size
+        self.max_timesteps = args.max_timesteps
 
     @staticmethod
     def moving_average(array, window_size):
@@ -167,7 +168,8 @@ class StatsViewer:
 
         if extra_figs is not None:
             for extra_fig in extra_figs:
-                figs.append(extra_fig)
+                if extra_fig is not None:
+                    figs.append(extra_fig)
 
         for fig in figs:
             fig.show()
@@ -186,21 +188,23 @@ def generate_special_dynamics_plot(config):
     fig = plt.figure()
     with open(config['file_name'], 'r') as f:
         reader = csv.reader(f.read().split('\n'), delimiter='|')
-        next(reader)
+        header = next(reader)
+        if len(header) < 8:
+            return None
         x_axis = []
         y_axes = []
         for row in reader:
             x_axis.append(int(row[2]))
-            y_axes.append([float(row[7]), float(row[8]), float(row[10])])
+            y_axes.append([float(row[7]), float(row[8]), float(row[10]), float(row[11])])
         x_axis = np.array(x_axis)
         y_axes = np.array(y_axes)
         y_axes_moving_avg = []
-        for i in range(3):
+        for i in range(len(y_axes[0])):
             arr = y_axes[:, i]
             y_axes_moving_avg.append(StatsViewer.moving_average(arr, 50))
         y_axes_moving_avg = np.array(y_axes_moving_avg)
 
-        gs = gridspec.GridSpec(3, 1)
+        gs = gridspec.GridSpec(len(y_axes[0]), 1)
 
         ax = get_generic_sub_plot(gs[0, 0], 'Global times teps', 'Dynamics loss')
         ax.plot(x_axis, y_axes_moving_avg[0])
@@ -212,6 +216,10 @@ def generate_special_dynamics_plot(config):
 
         ax = get_generic_sub_plot(gs[2, 0], 'Global time steps', 'Avg action std')
         ax.plot(x_axis, y_axes_moving_avg[2])
+        fig.add_axes(ax)
+
+        ax = get_generic_sub_plot(gs[3, 0], 'Global time steps', 'Avg reward bonus')
+        ax.plot(x_axis, y_axes_moving_avg[3])
         fig.add_axes(ax)
     return fig
 
@@ -229,14 +237,56 @@ def get_generic_sub_plot(pos, x_label=None, y_label=None):
     return ax
 
 
+class StatsPrinter:
+    def __init__(self, configs, args):
+        self.configs = configs
+        self.window_size = args.window_size
+        self.max_timesteps = args.max_timesteps
+
+    def print_stats(self):
+        out = ''
+        for config in self.configs:
+            value_idx = config['to_print']
+            with open(config['file_name'], 'r') as f:
+                reader = csv.reader(f.read().split('\n'), delimiter='|')
+                next(reader)
+                time_steps = []
+                values = []
+                for row in reader:
+                    t_step = int(row[2])
+                    if 0 < self.max_timesteps < t_step:
+                        break
+                    time_steps.append(t_step)
+                    v = []
+                    for idx in value_idx:
+                        v.append(float(row[idx]))
+                    values.append(v)
+                time_steps = np.array(time_steps)
+                values = np.array(values)
+                out += str(config) + '\n'
+                out += 'Avg: ' + str(np.mean(values, axis=0)) + '\n'
+                out += 'Sum: ' + str(np.sum(values, axis=0)) + '\n'
+                out += 'Max: ' + str(np.max(values, axis=0)) + '\n'
+        print(out)
+
+
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--folder', default='', help='Folder where the logs are stored', dest="folder")
+    parser.add_argument('-t', '--max_timesteps', default='0', help='Maximum timesteps for stats printer',
+                        dest="max_timesteps", type=int)
+    # parser.add_argument('-p', '--print_graphs', type=bool, default=True, help='Print graphs or not', dest="print_graphs")
     parser.add_argument('-ws', '--smoothing_window_size', default='50', type=int,
                         help='The window size to use for smoothing', dest="window_size")
     args = parser.parse_args()
+
+    configs = [{'file_name': args.folder + 'env_log_0.txt', 'to_print': [5]}]
+    printer = StatsPrinter(configs, args)
+    printer.print_stats()
+
+    # if args.print_graphs:
     configs = [{
         'file_name': args.folder + 'env_log_0.txt',
         'to_plot': [5, 6]

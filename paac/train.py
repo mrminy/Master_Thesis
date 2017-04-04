@@ -56,6 +56,8 @@ def get_arg_parser():
     #pong
     #breakout
     #qbert
+    #freeway
+    #frostbite
     #montezuma_revenge
     parser.add_argument('-g', default='breakout', help='Name of game', dest='game')
     parser.add_argument('-d', '--device', default='/gpu:0', type=str, help="Device to be used ('/cpu:0', /gpu:0, /gpu:1,...)", dest="device")

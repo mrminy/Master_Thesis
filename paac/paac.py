@@ -24,26 +24,22 @@ class PAACLearner(ActorLearner):
                           'header': 'Relative time|Absolute time|Global Time Step|Environment nr|Steps to finish|Reward|[{}]'.format(
                               actions_header)},
                          {'name': 'learning', 'file_name': 'learn_log_0.txt',
-                          'header': 'Relative time|Absolute time|Global Time Step|[Advantage]|[R]|[Value]|[Value Discrepancy]|Dynamics_loss|Autoencoder loss|Mean action uncertainty|Std action uncertainty'}]
+                          'header': 'Relative time|Absolute time|Global Time Step|[Advantage]|[R]|[Value]|[Value Discrepancy]|Dynamics_loss|Autoencoder loss|Mean action uncertainty|Std action uncertainty|Avg reward bonus'}]
         self.stats_logger = custom_logging.StatsLogger(logger_config, subfolder=args.debugging_folder)
 
         self.initial_exploration_constant = 1.
         self.exploration_constant_min = 0.01
-        self.exploration_discount = 1. / 6000000.
+        self.exploration_discount = 1. / 10000000.
 
         # Create replay memory
-        self.max_replay_size_autoencoder = 64000
-        self.max_replay_size_dynamics = int(
-            self.max_replay_size_autoencoder / (self.emulator_counts * self.max_local_steps))
-        self.replay_memory_dynamics = deque(maxlen=self.max_replay_size_dynamics)
+        self.max_replay_size_autoencoder = 16000
+        self.max_replay_size_dynamics = int(self.max_replay_size_autoencoder / self.emulator_counts)
         self.replay_memory_autoencoder = deque(maxlen=self.max_replay_size_dynamics)
-        # self.replay_memory_autoencoder_diff_frames = deque(self.max_replay_size_dynamics)
 
     @staticmethod
     def choose_next_actions(network, num_actions, states, emulator_counts, session):
-        network_output_v, network_output_pi = session.run(
-            [network.output_layer_v, network.output_layer_pi, network.encoder_output],
-            feed_dict={network.input_ph: states})
+        network_output_v, network_output_pi = session.run([network.output_layer_v, network.output_layer_pi],
+                                                          feed_dict={network.input_ph: states})
 
         action_indices = PAACLearner.__boltzmann(network_output_pi)
 
@@ -53,8 +49,8 @@ class PAACLearner(ActorLearner):
 
     @staticmethod
     def choose_next_actions_surprise(network, num_actions, states, emulator_counts, session, exploration_const):
-        autoencoder_states = states[:, :, :, 3].reshape(32, 84, 84, 1)
-        autoencoder_states_prev = states[:, :, :, 2].reshape(32, 84, 84, 1)
+        autoencoder_states = states[:, :, :, -1].reshape(emulator_counts, 84, 84, 1)
+        autoencoder_states_prev = states[:, :, :, -2].reshape(emulator_counts, 84, 84, 1)
         # autoencoder_states = np.reshape(states.transpose(0, 3, 1, 2), (emulator_counts * 4, 84, 84, 1))
 
         network_output_v, network_output_pi, network_latent_var = session.run(
@@ -125,8 +121,10 @@ class PAACLearner(ActorLearner):
 
     def __choose_next_actions(self, states):
         # TODO check if network is using surprise exploration architecture
-        return PAACLearner.choose_next_actions_surprise(self.network, self.num_actions, states, self.emulator_counts,
-                                                        self.session, self.__get_exploration_const())
+        return PAACLearner.choose_next_actions(self.network, self.num_actions, states, self.emulator_counts,
+                                               self.session)
+        # return PAACLearner.choose_next_actions_surprise(self.network, self.num_actions, states, self.emulator_counts,
+        #                                                 self.session, self.__get_exploration_const())
 
     def __get_exploration_const(self):
         return max(self.exploration_constant_min,
@@ -206,6 +204,8 @@ class PAACLearner(ActorLearner):
 
         y_batch = np.zeros((self.max_local_steps, self.emulator_counts))
         adv_batch = np.zeros((self.max_local_steps, self.emulator_counts))
+        all_ae_loss = np.zeros((self.max_local_steps, self.emulator_counts))
+        all_dynamics_loss = np.zeros((self.max_local_steps, self.emulator_counts))
         rewards = np.zeros((self.max_local_steps, self.emulator_counts))
         states = np.zeros([self.max_local_steps] + list(shared_states.shape), dtype=np.uint8)
         latent_vars = np.zeros((self.max_local_steps, self.emulator_counts, self.network.latent_shape))
@@ -227,8 +227,9 @@ class PAACLearner(ActorLearner):
                     shared_states)
                 actions_sum += next_actions
 
-                mean_action_uncertainty = action_uncertainty.mean()
-                std_action_uncertainty = action_uncertainty.std()
+                if action_uncertainty is not None:
+                    mean_action_uncertainty = action_uncertainty.mean()
+                    std_action_uncertainty = action_uncertainty.std()
 
                 for z in range(next_actions.shape[0]):
                     shared_actions[z] = next_actions[z]
@@ -268,8 +269,12 @@ class PAACLearner(ActorLearner):
 
             n_Rs = np.copy(Rs)
 
+            self.update_reward_bonus(states, actions, all_dynamics_loss)
+
+            avg_reward_bonus = np.mean(all_dynamics_loss)
+
             for t in reversed(range(max_local_steps)):
-                n_Rs = rewards[t] + self.gamma * n_Rs * episodes_over_masks[t]
+                n_Rs = rewards[t] + all_dynamics_loss[t] + self.gamma * n_Rs * episodes_over_masks[t]
                 y_batch[t] = np.copy(n_Rs)
                 adv_batch[t] = n_Rs - values[t]
 
@@ -278,12 +283,15 @@ class PAACLearner(ActorLearner):
             flat_adv_batch = adv_batch.reshape(-1)
             flat_actions = actions.reshape(max_local_steps * self.emulator_counts, self.num_actions)
 
-            # states shape (t_max, emulator_count, 84, 84, 4)
             trans_state = states.transpose(1, 0, 2, 3, 4)
-            flat_autoencoder_prev_states = trans_state[:, 1:, :, :, 1].reshape(32 * 4, 84, 84, 1)
-            flat_autoencoder_states = trans_state[:, 1:, :, :, 2].reshape(32 * 4, 84, 84, 1)
-            flat_autoencoder_next_states = trans_state[:, 1:, :, :, 3].reshape(32 * 4, 84, 84, 1)
-            flat_autoencoder_actions = actions.transpose(1, 0, 2)[:, :-1, :].reshape(32 * 4, self.num_actions)
+            flat_autoencoder_prev_states = trans_state[:, 1:, :, :, -3].reshape(
+                self.emulator_counts * (self.max_local_steps - 1), 84, 84, 1)
+            flat_autoencoder_states = trans_state[:, 1:, :, :, -2].reshape(
+                self.emulator_counts * (self.max_local_steps - 1), 84, 84, 1)
+            flat_autoencoder_next_states = trans_state[:, 1:, :, :, -1].reshape(
+                self.emulator_counts * (self.max_local_steps - 1), 84, 84, 1)
+            flat_autoencoder_actions = actions.transpose(1, 0, 2)[:, :-1, :].reshape(
+                self.emulator_counts * (self.max_local_steps - 1), self.num_actions)
             flat_autoencoder_diff_frames = flat_autoencoder_states - flat_autoencoder_next_states
 
             # Store transition data in replay memory (prev, current, next, action, diff)
@@ -311,18 +319,18 @@ class PAACLearner(ActorLearner):
                                   self.stats_logger.get_stats_for_array(flat_adv_batch),
                                   self.stats_logger.get_stats_for_array(flat_y_batch), Rs_stats,
                                   self.stats_logger.get_stats_for_array(value_discrepancy), dynamics_loss,
-                                  autoencoder_loss, mean_action_uncertainty, std_action_uncertainty)
+                                  autoencoder_loss, mean_action_uncertainty, std_action_uncertainty, avg_reward_bonus)
 
             if counter % (2048 / self.emulator_counts) == 0:
                 curr_time = time.time()
                 global_steps = self.global_step
                 last_ten = 0.0 if len(total_rewards) < 1 else np.mean(total_rewards[-10:])
                 logging.info(
-                    "Ran {} steps, at {} steps/s ({} steps/s avg), last 10 rewards avg {}, dynamics loss {}, autoencoder loss {}, action uncertainty std {}"
+                    "Ran {} steps, at {} steps/s ({} steps/s avg), last 10 rewards avg {}, dynamics loss {}, autoencoder loss {}, action uncertainty std {}, avg reward bonus {}"
                         .format(global_steps,
                                 self.max_local_steps * self.emulator_counts / (curr_time - loop_start_time),
                                 (global_steps - global_step_start) / (curr_time - start_time),
-                                last_ten, dynamics_loss, autoencoder_loss, std_action_uncertainty))
+                                last_ten, dynamics_loss, autoencoder_loss, std_action_uncertainty, avg_reward_bonus))
 
             if counter % (20480 / self.emulator_counts) == 0:
                 self.do_plotting()
@@ -335,12 +343,36 @@ class PAACLearner(ActorLearner):
 
         self.do_plotting()
 
+    def update_reward_bonus(self, states, actions, all_ae_loss):
+        for t in range(self.max_local_steps):
+            autoencoder_states_next = states[t, :, :, :, -1].reshape(self.emulator_counts, 84, 84, 1)
+            autoencoder_states = states[t, :, :, :, -2].reshape(self.emulator_counts, 84, 84, 1)
+            autoencoder_states_prev = states[t, :, :, :, -3].reshape(self.emulator_counts, 84, 84, 1)
+            # movement_focus = autoencoder_states - autoencoder_states_prev
+
+            # TODO this can be done in one operation
+            feed_dict = {self.network.autoencoder_input_ph: autoencoder_states}
+            curr_latent_vars = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
+            feed_dict = {self.network.autoencoder_input_ph: autoencoder_states_prev}
+            prev_latent_vars = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
+            feed_dict = {self.network.autoencoder_input_ph: autoencoder_states_next}
+            next_latent_vars = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
+
+            feed_dict = {self.network.dynamics_input_prev: prev_latent_vars,
+                         self.network.dynamics_input: curr_latent_vars,
+                         self.network.dynamics_latent_target: next_latent_vars,
+                         self.network.action_input: actions[t, :, :],
+                         self.network.keep_prob: 1.}
+            dynamics_loss = self.session.run(self.network.dynamics_loss_full, feed_dict=feed_dict)
+
+            dynamics_loss = dynamics_loss.reshape((self.emulator_counts, self.network.latent_shape)).mean(axis=1)
+            all_ae_loss[t] = dynamics_loss * self.__get_exploration_const()
+
     def train_dynamics_model(self):
         # Optimize autoencoder
         num_epochs = 100
         autoencoder_loss = 0.
         dynamics_loss = 0.
-        # TODO fix this schedule such that either the autoencoder is trained or the dynamics prediction is trained
         if 50000 < self.global_step:
             for i in range(num_epochs):
                 sample = random.sample(self.replay_memory_autoencoder, 1)[0]

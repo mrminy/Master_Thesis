@@ -221,21 +221,16 @@ class DynamicsNetwork(Network):
                 e3 = Convolution2D(64, 2, 2, activation='relu', border_mode='same', name='e3')(e2)
                 e4 = MaxPooling2D((3, 3), border_mode='same', name='e4')(e3)
                 e5 = Dense(self.latent_shape, activation='relu', name='e5')(flatten(e4))
-                # _, _, e1 = conv2d('e1', self.autoencoder_input, 32, 8, 4, 4)
-                # _, _, e2 = conv2d('e2', e1, 64, 4, 32, 2)
-                # _, _, e3 = conv2d('e3', e2, 64, 3, 64, 1)
-                # _, _, e4 = fc('e4', flatten(e3), self.latent_shape, activation="relu")
-                self.encoder_output = e5
+
+                # TODO try to use same weights for encoder and decoder
+                # e1_full = e1(self.autoencoder_input)
+                # e2_full = e2(e1_full)
+                # e3_full = e3(e2_full)
+                # e4_full = e4(e3_full)
+                # e5_full = e5(e4_full)
+                self.encoder_output = e5 #e5_full
 
                 # Decoder
-                # d1 = Dense(3136, activation='relu', name='d1')
-                # d2 = Reshape((14, 14, 16), name='d2')
-                # d3 = e3
-                # d4 = UpSampling2D((3, 3), name='d4')
-                # d5 = e1
-                # d6 = UpSampling2D((2, 2), name='d6')
-                # d7 = Convolution2D(1, 4, 4, activation='relu', border_mode='same', name='d7')
-
                 d1 = Dense(3136, activation='relu', name='d1')
                 d2 = Reshape((14, 14, 16), name='d2')
                 d3 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='d3')

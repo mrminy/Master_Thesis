@@ -95,7 +95,8 @@ class PolicyVDNetwork(Network):
 
                 # Dynamics model ops TODO find uncertainty in dynamics model and make training ops for dynamics model
                 latent_diff = tf.subtract(self.dynamics_latent_target, self.dynamics_input)
-                self.dynamics_loss = tf.reduce_mean(tf.pow(tf.subtract(latent_diff, self.latent_prediction), 2))
+                self.dynamics_loss_full = tf.pow(tf.subtract(latent_diff, self.latent_prediction), 2)
+                self.dynamics_loss = tf.reduce_mean(self.dynamics_loss_full)
                 self.dynamics_optimizer = tf.train.AdamOptimizer().minimize(self.dynamics_loss)
 
                 # Autoencoder model ops
@@ -105,9 +106,10 @@ class PolicyVDNetwork(Network):
                     tf.add(tf.scalar_mul(1.0 / 255.0, tf.cast(self.autoencoder_movement_focus_input_ph, tf.float32)),
                            1.0), 5.0)
                 # self.autoencoder_loss = tf.reduce_mean(tf.pow(tf.subtract(self.autoencoder_input, self.autoencoder_output), 2))
-                self.autoencoder_loss = tf.reduce_mean(tf.pow(
+                self.autoencoder_loss_full = tf.pow(
                     tf.multiply(tf.subtract(self.autoencoder_input, self.autoencoder_output),
-                                self.autoencoder_movement_focus_input), 2))
+                                self.autoencoder_movement_focus_input), 2)
+                self.autoencoder_loss = tf.reduce_mean(self.autoencoder_loss_full)
                 # self.autoencoder_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.autoencoder_output, labels=self.autoencoder_input))
                 # self.autoencoder_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.autoencoder_input, logits=self.autoencoder_output))
                 # cross_entropy = -tf.reduce_mean(self.autoencoder_input * tf.log(self.autoencoder_output))
