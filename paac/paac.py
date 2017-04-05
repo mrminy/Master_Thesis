@@ -27,9 +27,9 @@ class PAACLearner(ActorLearner):
                           'header': 'Relative time|Absolute time|Global Time Step|[Advantage]|[R]|[Value]|[Value Discrepancy]|Dynamics_loss|Autoencoder loss|Mean action uncertainty|Std action uncertainty|Avg reward bonus'}]
         self.stats_logger = custom_logging.StatsLogger(logger_config, subfolder=args.debugging_folder)
 
-        self.initial_exploration_constant = 1.
-        self.exploration_constant_min = 0.01
-        self.exploration_discount = 1. / 10000000.
+        self.initial_exploration_constant = .2
+        self.exploration_constant_min = 0.001
+        self.exploration_discount = 1. / 20000000.
 
         # Create replay memory
         self.max_replay_size_autoencoder = 16000

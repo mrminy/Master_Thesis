@@ -22,20 +22,24 @@ class StatsViewer:
         correlate[-1] = correlate[-2]
         return correlate
 
-    def _moving_op(self, array, op, window_size=50):
+    @staticmethod
+    def moving_op(array, op, window_size=50):
         array = np.asarray([op(array[i:i + window_size]) for i in range(len(array))])
         array[0] = array[1]
         array[-1] = array[-2]
         return array
 
-    def moving_max(self, array):
-        return self._moving_op(array, np.max, self.window_size)
+    @staticmethod
+    def moving_max(array, window_size):
+        return StatsViewer.moving_op(array, np.max, window_size)
 
-    def moving_min(self, array):
-        return self._moving_op(array, np.min, self.window_size)
+    @staticmethod
+    def moving_min(array, window_size):
+        return StatsViewer.moving_op(array, np.min, window_size)
 
-    def moving_std(self, array):
-        return self._moving_op(array, np.std, self.window_size)
+    @staticmethod
+    def moving_std(array, window_size):
+        return StatsViewer.moving_op(array, np.std, window_size)
 
     def plot(self, extra_figs):
         self.s = []
@@ -93,13 +97,13 @@ class StatsViewer:
                     if series[name]['type'] == 'value':
                         ax.set_ylabel(headers[plot])
                         asarray = np.asarray(series[name]['data'])
-                        moving_std = self.moving_std(asarray)
+                        moving_std = self.moving_std(asarray, self.window_size)
                         moving_average = self.moving_average(asarray, self.window_size)
                         ax.fill_between(x_series, np.add(moving_average, moving_std),
                                         np.add(moving_average, np.multiply(-1.0, moving_std)), facecolor='b', alpha=0.2)
                         ax.plot(x_series, moving_average, color='b')
-                        ax.plot(x_series, self.moving_min(asarray), color='r', alpha=0.3)
-                        ax.plot(x_series, self.moving_max(asarray), color='g', alpha=0.3)
+                        ax.plot(x_series, self.moving_min(asarray, self.window_size), color='r', alpha=0.3)
+                        ax.plot(x_series, self.moving_max(asarray, self.window_size), color='g', alpha=0.3)
                     elif series[name]['type'] == 'multiple_values':
                         header = headers[plot].replace('[', '').replace(']', '')
                         ax.set_title(header)
@@ -147,7 +151,7 @@ class StatsViewer:
         ax.get_xaxis().tick_bottom()
         ax.get_yaxis().tick_left()
         asarray = np.asarray(series[y_name]['data'])
-        moving_std = self.moving_std(asarray)[::subsample]
+        moving_std = self.moving_std(asarray, self.window_size)[::subsample]
         moving_average = self.moving_average(asarray, self.window_size)[::subsample]
         ax.fill_between(x_series, np.add(moving_average, moving_std),
                         np.add(moving_average, np.multiply(-1.0, moving_std)), facecolor='b', alpha=0.2)
@@ -160,7 +164,7 @@ class StatsViewer:
         ax.get_xaxis().tick_bottom()
         ax.get_yaxis().tick_left()
         asarray = np.asarray(series[y_name]['data'])
-        moving_std = self.moving_std(asarray)[::subsample]
+        moving_std = self.moving_std(asarray, self.window_size)[::subsample]
         moving_average = self.moving_average(asarray, self.window_size)[::subsample]
         ax.fill_between(x_series, np.add(moving_average, moving_std),
                         np.add(moving_average, np.multiply(-1.0, moving_std)), facecolor='b', alpha=0.2)
