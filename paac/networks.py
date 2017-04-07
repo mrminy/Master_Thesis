@@ -135,6 +135,9 @@ class Network(object):
         self.decoder_input = None
         self.latent_prediction = None
 
+        self.z_mean = None
+        self.z_log_var = None
+
         with tf.device(self.device):
             with tf.name_scope(self.name):
                 self.one_over_emulators = 1.0 / self.emulator_counts
@@ -265,22 +268,20 @@ class DynamicsNetwork(Network):
                 self.latent_prediction = pred3
 
                 # VAE test
-                # batch_size = 32
-                # intermediate_dim = 3136
-                # original_dim = 7056
-                # epsilon_std = 1.0
-                #
-                # x = Input(batch_shape=(batch_size, 84, 84, 1))
-                # h = Dense(intermediate_dim, activation='relu')(flatten(x))
-                # z_mean = Dense(self.latent_shape)(h)
-                # z_log_var = Dense(self.latent_shape)(h)
+                batch_size = 32
+                intermediate_dim = 3136
+                original_dim = 7056
+                epsilon_std = 1.0
+
+                # self.z_mean = Dense(self.latent_shape)(self.encoder_output)
+                # self.z_log_var = Dense(self.latent_shape)(self.encoder_output)
                 #
                 # def sampling(args):
                 #     z_mean, z_log_var = args
-                #     epsilon = K.random_normal(shape=(batch_size, self.latent_shape), mean=0., stddev=epsilon_std)
+                #     epsilon = K.random_normal(shape=(4, self.latent_shape), mean=0., std=epsilon_std)
                 #     return z_mean + K.exp(z_log_var / 2) * epsilon
                 #
-                # z = Lambda(sampling)([z_mean, z_log_var])
+                # z = Lambda(sampling)([self.z_mean, self.z_log_var])
                 #
                 # # we instantiate these layers separately so as to reuse them later
                 # decoder_h = Dense(intermediate_dim, activation='relu')
@@ -288,18 +289,10 @@ class DynamicsNetwork(Network):
                 # h_decoded = decoder_h(z)
                 # x_decoded_mean = decoder_mean(h_decoded)
                 #
-                # def vae_loss(x, x_decoded_mean):
-                #     xent_loss = original_dim * metrics.binary_crossentropy(x, x_decoded_mean)
-                #     kl_loss = - 0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
-                #     return xent_loss + kl_loss
-                #
-                # vae = Model(x, x_decoded_mean)
-                # vae.compile(optimizer='rmsprop', loss=vae_loss)
-                #
-                # encoder = Model(x, z_mean)
-                # decoder_input = Input(shape=(self.latent_shape,))
-                # _h_decoded = decoder_h(decoder_input)
+                # self.autoencoder_output = x_decoded_mean
+                # self.encoder_output = self.z_mean
+                # _h_decoded = decoder_h(self.decoder_input)
                 # _x_decoded_mean = decoder_mean(_h_decoded)
-                # generator = Model(decoder_input, _x_decoded_mean)
+                # self.decoder_output = _x_decoded_mean
 
 

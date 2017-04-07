@@ -40,25 +40,40 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f0', '--folder0', default='', help='Folder where the logs are stored', dest="folder0")
-    parser.add_argument('-f1', '--folder1', default='', help='Folder where the logs are stored', dest="folder1")
-    parser.add_argument('-f2', '--folder2', default='', help='Folder where the logs are stored', dest="folder2")
-    parser.add_argument('-f3', '--folder3', default='', help='Folder where the logs are stored', dest="folder3")
+    parser.add_argument('-f0', '--file0', default='', help='Where the file-logs are stored', dest="file0")
+    parser.add_argument('-f1', '--file1', default='', help='Where the file-logs are stored', dest="file1")
+    parser.add_argument('-f2', '--file2', default='', help='Where the file-logs are stored', dest="file2")
+    parser.add_argument('-f3', '--file3', default='', help='Where the file-logs are stored', dest="file3")
+    parser.add_argument('-f4', '--file4', default='', help='Where the file-logs are stored', dest="file4")
+    parser.add_argument('-f5', '--file5', default='', help='Where the file-logs are stored', dest="file5")
+    parser.add_argument('-f6', '--file6', default='', help='Where the file-logs are stored', dest="file6")
+    parser.add_argument('-f7', '--file7', default='', help='Where the file-logs are stored', dest="file7")
     parser.add_argument('-l', '--show_legend', default=False, type=bool, help='Show legend in plot or not',
                         dest="show_legend")
-    parser.add_argument('-ws', '--smoothing_window_size', default='50', type=int,
+    parser.add_argument('-ws', '--smoothing_window_size', default='100', type=int,
                         help='The window size to use for smoothing', dest="window_size")
     parser.add_argument('-t', '--max_time_steps', default='0', type=int,
                         help='Maximum time steps to show in the plot', dest="max_time_steps")
     args = parser.parse_args()
+    
+    time_step_idx = 2
+    plot_idx = 5
 
-    configs = [{'file_name': args.folder0 + 'env_log_0.txt', 'to_print': [2, 5], 'color': 'g'}]
-    if len(args.folder1) > 0:
-        configs.append({'file_name': args.folder1 + 'env_log_0.txt', 'to_print': [2, 5], 'color': 'b'})
-    if len(args.folder2) > 0:
-        configs.append({'file_name': args.folder2 + 'env_log_0.txt', 'to_print': [2, 5], 'color': 'r'})
-    if len(args.folder3) > 0:
-        configs.append({'file_name': args.folder3 + 'env_log_0.txt', 'to_print': [2, 5], 'color': 'purple'})
+    configs = [{'file_name': args.file0, 'to_print': [time_step_idx, plot_idx], 'color': 'g'}]
+    if len(args.file1) > 0:
+        configs.append({'file_name': args.file1, 'to_print': [time_step_idx, plot_idx], 'color': 'b'})
+    if len(args.file2) > 0:
+        configs.append({'file_name': args.file2, 'to_print': [time_step_idx, plot_idx], 'color': 'r'})
+    if len(args.file3) > 0:
+        configs.append({'file_name': args.file3, 'to_print': [time_step_idx, plot_idx], 'color': 'purple'})
+    if len(args.file4) > 0:
+        configs.append({'file_name': args.file4, 'to_print': [time_step_idx, plot_idx], 'color': 'y'})
+    if len(args.file5) > 0:
+        configs.append({'file_name': args.file5, 'to_print': [time_step_idx, plot_idx], 'color': 'm'})
+    if len(args.file6) > 0:
+        configs.append({'file_name': args.file6, 'to_print': [time_step_idx, plot_idx], 'color': 'k'})
+    if len(args.file7) > 0:
+        configs.append({'file_name': args.file7, 'to_print': [time_step_idx, plot_idx], 'color': 'c'})
 
     max_time_steps = None
     if args.max_time_steps > 0:

@@ -63,6 +63,7 @@ def get_arg_parser():
     #qbert
     #freeway
     #frostbite
+    #boxing
     #montezuma_revenge
 
     # RL parameters

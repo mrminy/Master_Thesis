@@ -105,10 +105,19 @@ class PolicyVDNetwork(Network):
                 self.autoencoder_movement_focus_input = tf.pow(
                     tf.add(tf.scalar_mul(1.0 / 255.0, tf.cast(self.autoencoder_movement_focus_input_ph, tf.float32)),
                            1.0), 5.0)
+
+                # MSE autoencoder loss
                 self.autoencoder_loss_full = tf.pow(
                     tf.multiply(tf.subtract(self.autoencoder_input, self.autoencoder_output),
                                 self.autoencoder_movement_focus_input), 2)
                 self.autoencoder_loss = tf.reduce_mean(self.autoencoder_loss_full)
+
+                def vae_loss(x, x_decoded_mean):
+                    xent_loss = 7056 * metrics.binary_crossentropy(x, x_decoded_mean)
+                    kl_loss = - 0.5 * K.sum(1 + self.z_log_var - K.square(self.z_mean) - K.exp(self.z_log_var), axis=-1)
+                    return xent_loss + kl_loss
+
+                # self.autoencoder_loss = vae_loss(flatten(self.autoencoder_input), self.autoencoder_output)
                 self.autoencoder_optimizer = tf.train.AdamOptimizer().minimize(self.autoencoder_loss)
 
                 # Entropy: sum_a (-p_a ln p_a)
@@ -143,16 +152,15 @@ class PolicyVDNetwork(Network):
                                                 self.output_layer_v)
 
                 # Action uncertainty with tf # TODO test this!
-                self.T = conf['T']
-                self.tf_T = tf.constant(self.T, dtype=tf.int8)  # Number of stochastic feed-forwards
-                self.tf_emulator_count = tf.constant(self.emulator_counts, dtype=tf.int8)
-                self.tf_latent_shape = tf.constant(self.latent_shape, dtype=tf.int8)
-                transition_predictions = tf.reshape(self.latent_prediction, [self.emulator_counts, self.T, self.latent_shape])
-                transition_predictions_mean, transition_predictions_var = tf.nn.moments(transition_predictions, axes=[1])
-                action_uncertainties = tf.reduce_mean(tf.multiply(transition_predictions_var, 2), axis=1)
-                norm_action_uncertainties = tf.nn.softmax(action_uncertainties)
-                mean_norm_action_uncertainties = tf.reduce_mean(norm_action_uncertainties)
-                self.delta_action_uncertainties = tf.subtract(norm_action_uncertainties, mean_norm_action_uncertainties)
+                # self.T = conf['T']
+                # transition_predictions = tf.reshape(self.latent_prediction,
+                #                                     [self.emulator_counts, self.T, self.latent_shape])
+                # transition_predictions_mean, transition_predictions_var = tf.nn.moments(transition_predictions,
+                #                                                                         axes=[1])
+                # action_uncertainties = tf.reduce_mean(tf.multiply(transition_predictions_var, 2), axis=1)
+                # norm_action_uncertainties = tf.nn.softmax(action_uncertainties)
+                # mean_norm_action_uncertainties = tf.reduce_mean(norm_action_uncertainties, axis=-1)
+                # self.delta_action_uncertainties = tf.subtract(norm_action_uncertainties, mean_norm_action_uncertainties)
 
 
 class SurpriseExplorationNetwork(PolicyVDNetwork, DynamicsNetwork):

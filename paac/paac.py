@@ -65,28 +65,30 @@ class PAACLearner(ActorLearner):
         network_latent_var_prev = session.run(network.encoder_output,
                                               feed_dict={network.autoencoder_input_ph: autoencoder_states_prev})
 
-        latent_repeat = np.repeat(network_latent_var, network.T, axis=0)
-        prev_latent_repeat = np.repeat(network_latent_var_prev, network.T, axis=0)
+        # TODO try to do the next 15 lines in tensorflow on the gpu
+        T = 30  # number of stochastic forward passes
+        latent_repeat = np.repeat(network_latent_var, T, axis=0)
+        prev_latent_repeat = np.repeat(network_latent_var_prev, T, axis=0)
         action_uncertainties = np.zeros((num_actions, emulator_counts))
         for a in range(num_actions):
-            action_repeat = np.repeat([np.eye(num_actions)[a]], network.T * emulator_counts, axis=0)
+            action_repeat = np.repeat([np.eye(num_actions)[a]], T * emulator_counts, axis=0)
             feed_dict = {network.keep_prob: .9, network.dynamics_input_prev: prev_latent_repeat,
                          network.dynamics_input: latent_repeat, network.action_input: action_repeat}
-            transition_predictions = session.run(network.delta_action_uncertainties, feed_dict=feed_dict)
+            transition_predictions = session.run(network.latent_prediction, feed_dict=feed_dict)
+            transition_predictions = transition_predictions.reshape(emulator_counts, T, network.latent_shape)
+            transition_predictions = np.mean(np.multiply(np.std(transition_predictions, axis=1), 2), axis=1)
             action_uncertainties[a] = transition_predictions
 
-        if action_uncertainties.std() > 0.:
-            network_output_pi_w_surprise = np.clip(np.add(network_output_pi, action_uncertainties), 0., 1.)
+        action_uncertainties = normalize(np.array(action_uncertainties).transpose(), norm='l1', axis=1)
+        action_uncertainties = np.subtract(action_uncertainties, 1./num_actions)  # * exploration_const
+        network_output_pi_w_surprise = np.clip(np.add(network_output_pi, action_uncertainties), 0., 1.)
 
-            # Probability matching
-            action_indices = PAACLearner.__boltzmann(normalize(network_output_pi_w_surprise, norm='l1', axis=1))
+        # Probability matching
+        action_indices = PAACLearner.__boltzmann(normalize(network_output_pi_w_surprise, norm='l1', axis=1))
 
-            if random.random() < 0.0001:
-                print("output_pi:", network_output_pi[0], "\nUncertainties", action_uncertainties[0],
-                      "\noutput_pi_surprise:", network_output_pi_w_surprise[0])
-        else:
-            # Regular boltzmann if there is no uncertainty
-            action_indices = PAACLearner.__boltzmann(network_output_pi)
+        if random.random() < 0.0001:
+            print("output_pi:", network_output_pi[0], "\nUncertainties", action_uncertainties[0],
+                  "\noutput_pi_surprise:", network_output_pi_w_surprise[0])
 
         # UCB
         # network_output_pi_w_surprise = np.add(network_output_pi, action_uncertainties)
@@ -205,8 +207,8 @@ class PAACLearner(ActorLearner):
                 actions_sum += next_actions
 
                 if action_uncertainty is not None:
-                    mean_action_uncertainty = action_uncertainty.mean()
-                    std_action_uncertainty = action_uncertainty.std()
+                    mean_action_uncertainty = np.mean(np.abs(action_uncertainty))
+                    std_action_uncertainty = np.mean(np.std(action_uncertainty, axis=1))
 
                 for z in range(next_actions.shape[0]):
                     shared_actions[z] = next_actions[z]
@@ -305,7 +307,7 @@ class PAACLearner(ActorLearner):
                                 (global_steps - global_step_start) / (curr_time - start_time),
                                 last_ten, dynamics_loss, autoencoder_loss, std_action_uncertainty, avg_reward_bonus))
 
-            if counter % (20480 / self.emulator_counts) == 0:
+            if counter % (40960 / self.emulator_counts) == 0:
                 self.do_plotting()
 
             self.save_vars()
