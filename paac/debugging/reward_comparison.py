@@ -52,9 +52,7 @@ if __name__ == '__main__':
                         help='Maximum time steps to show in the plot', dest="max_time_steps")
     args = parser.parse_args()
 
-    configs = []
-    if len(args.folder0) > 0:
-        configs.append({'file_name': args.folder0 + 'env_log_0.txt', 'to_print': [2, 5], 'color': 'g'})
+    configs = [{'file_name': args.folder0 + 'env_log_0.txt', 'to_print': [2, 5], 'color': 'g'}]
     if len(args.folder1) > 0:
         configs.append({'file_name': args.folder1 + 'env_log_0.txt', 'to_print': [2, 5], 'color': 'b'})
     if len(args.folder2) > 0:

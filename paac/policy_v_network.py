@@ -93,7 +93,7 @@ class PolicyVDNetwork(Network):
                 self.log_output_layer_pi = tf.log(tf.add(self.output_layer_pi, tf.constant(1e-30)),
                                                   name=layer_name + '_log_policy')
 
-                # Dynamics model ops TODO find uncertainty in dynamics model and make training ops for dynamics model
+                # Dynamics model ops
                 latent_diff = tf.subtract(self.dynamics_latent_target, self.dynamics_input)
                 self.dynamics_loss_full = tf.pow(tf.subtract(latent_diff, self.latent_prediction), 2)
                 self.dynamics_loss = tf.reduce_mean(self.dynamics_loss_full)
@@ -105,15 +105,10 @@ class PolicyVDNetwork(Network):
                 self.autoencoder_movement_focus_input = tf.pow(
                     tf.add(tf.scalar_mul(1.0 / 255.0, tf.cast(self.autoencoder_movement_focus_input_ph, tf.float32)),
                            1.0), 5.0)
-                # self.autoencoder_loss = tf.reduce_mean(tf.pow(tf.subtract(self.autoencoder_input, self.autoencoder_output), 2))
                 self.autoencoder_loss_full = tf.pow(
                     tf.multiply(tf.subtract(self.autoencoder_input, self.autoencoder_output),
                                 self.autoencoder_movement_focus_input), 2)
                 self.autoencoder_loss = tf.reduce_mean(self.autoencoder_loss_full)
-                # self.autoencoder_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.autoencoder_output, labels=self.autoencoder_input))
-                # self.autoencoder_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.autoencoder_input, logits=self.autoencoder_output))
-                # cross_entropy = -tf.reduce_mean(self.autoencoder_input * tf.log(self.autoencoder_output))
-                # self.autoencoder_loss = tf.add(self.autoencoder_loss, tf.scalar_mul(0.01, cross_entropy))
                 self.autoencoder_optimizer = tf.train.AdamOptimizer().minimize(self.autoencoder_loss)
 
                 # Entropy: sum_a (-p_a ln p_a)
@@ -146,6 +141,18 @@ class PolicyVDNetwork(Network):
 
                 self.value_discrepancy = tf.add(tf.subtract(self.adv_actor_ph, self.critic_target_ph),
                                                 self.output_layer_v)
+
+                # Action uncertainty with tf # TODO test this!
+                self.T = conf['T']
+                self.tf_T = tf.constant(self.T, dtype=tf.int8)  # Number of stochastic feed-forwards
+                self.tf_emulator_count = tf.constant(self.emulator_counts, dtype=tf.int8)
+                self.tf_latent_shape = tf.constant(self.latent_shape, dtype=tf.int8)
+                transition_predictions = tf.reshape(self.latent_prediction, [self.emulator_counts, self.T, self.latent_shape])
+                transition_predictions_mean, transition_predictions_var = tf.nn.moments(transition_predictions, axes=[1])
+                action_uncertainties = tf.reduce_mean(tf.multiply(transition_predictions_var, 2), axis=1)
+                norm_action_uncertainties = tf.nn.softmax(action_uncertainties)
+                mean_norm_action_uncertainties = tf.reduce_mean(norm_action_uncertainties)
+                self.delta_action_uncertainties = tf.subtract(norm_action_uncertainties, mean_norm_action_uncertainties)
 
 
 class SurpriseExplorationNetwork(PolicyVDNetwork, DynamicsNetwork):

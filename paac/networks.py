@@ -1,10 +1,11 @@
-import tensorflow as tf
 import logging
+
 import numpy as np
+import tensorflow as tf
 from keras.engine import Input
 from keras.engine import Model
-from keras.layers import Convolution2D, MaxPooling2D, Flatten, Dense, Reshape, UpSampling2D
-from keras.models import Sequential
+from keras.layers import Convolution2D, MaxPooling2D, Dense, Reshape, UpSampling2D, K, Lambda
+from keras import metrics
 
 
 def flatten(_input):
@@ -118,7 +119,7 @@ class Network(object):
         self.device = conf['device']
 
         # Vars used in dynamics model
-        self.latent_shape = 128
+        self.latent_shape = conf['latent_shape']
         self.keep_prob = tf.placeholder(tf.float32)  # For dropout
         self.dynamics_input = tf.placeholder("float32", [None, self.latent_shape],
                                              name="latent_input")
@@ -221,21 +222,14 @@ class DynamicsNetwork(Network):
                 e3 = Convolution2D(64, 2, 2, activation='relu', border_mode='same', name='e3')(e2)
                 e4 = MaxPooling2D((3, 3), border_mode='same', name='e4')(e3)
                 e5 = Dense(self.latent_shape, activation='relu', name='e5')(flatten(e4))
+                self.encoder_output = e5
 
-                # TODO try to use same weights for encoder and decoder
-                # e1_full = e1(self.autoencoder_input)
-                # e2_full = e2(e1_full)
-                # e3_full = e3(e2_full)
-                # e4_full = e4(e3_full)
-                # e5_full = e5(e4_full)
-                self.encoder_output = e5 #e5_full
-
-                # Decoder
+                # Decoder layers
                 d1 = Dense(3136, activation='relu', name='d1')
                 d2 = Reshape((14, 14, 16), name='d2')
-                d3 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='d3')
+                d3 = Convolution2D(64, 2, 2, activation='relu', border_mode='same', name='d3')
                 d4 = UpSampling2D((3, 3), name='d4')
-                d5 = Convolution2D(64, 2, 2, activation='relu', border_mode='same', name='d5')
+                d5 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='d5')
                 d6 = UpSampling2D((2, 2), name='d6')
                 d7 = Convolution2D(1, 4, 4, activation='relu', border_mode='same', name='d7')
 
@@ -269,3 +263,43 @@ class DynamicsNetwork(Network):
                 pred2 = tf.nn.dropout(pred2, keep_prob=self.keep_prob, name='pred2_drop')
                 _, _, pred3 = fc('pred3', pred2, self.latent_shape, activation="tanh")
                 self.latent_prediction = pred3
+
+                # VAE test
+                # batch_size = 32
+                # intermediate_dim = 3136
+                # original_dim = 7056
+                # epsilon_std = 1.0
+                #
+                # x = Input(batch_shape=(batch_size, 84, 84, 1))
+                # h = Dense(intermediate_dim, activation='relu')(flatten(x))
+                # z_mean = Dense(self.latent_shape)(h)
+                # z_log_var = Dense(self.latent_shape)(h)
+                #
+                # def sampling(args):
+                #     z_mean, z_log_var = args
+                #     epsilon = K.random_normal(shape=(batch_size, self.latent_shape), mean=0., stddev=epsilon_std)
+                #     return z_mean + K.exp(z_log_var / 2) * epsilon
+                #
+                # z = Lambda(sampling)([z_mean, z_log_var])
+                #
+                # # we instantiate these layers separately so as to reuse them later
+                # decoder_h = Dense(intermediate_dim, activation='relu')
+                # decoder_mean = Dense(original_dim, activation='sigmoid')
+                # h_decoded = decoder_h(z)
+                # x_decoded_mean = decoder_mean(h_decoded)
+                #
+                # def vae_loss(x, x_decoded_mean):
+                #     xent_loss = original_dim * metrics.binary_crossentropy(x, x_decoded_mean)
+                #     kl_loss = - 0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
+                #     return xent_loss + kl_loss
+                #
+                # vae = Model(x, x_decoded_mean)
+                # vae.compile(optimizer='rmsprop', loss=vae_loss)
+                #
+                # encoder = Model(x, z_mean)
+                # decoder_input = Input(shape=(self.latent_shape,))
+                # _h_decoded = decoder_h(decoder_input)
+                # _x_decoded_mean = decoder_mean(_h_decoded)
+                # generator = Model(decoder_input, _x_decoded_mean)
+
+

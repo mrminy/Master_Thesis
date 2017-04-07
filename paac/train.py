@@ -41,7 +41,12 @@ def get_network_and_environment_creator(args, random_seed=3):
                     'device': args.device,
                     'emulator_counts': args.emulator_counts,
                     'clip_norm': args.clip_norm,
-                    'clip_norm_type': args.clip_norm_type}
+                    'clip_norm_type': args.clip_norm_type,
+                    'initial_lr': args.initial_lr,
+                    'e': args.e,
+                    'alpha': args.alpha,
+                    'T': args.T,
+                    'latent_shape': args.latent_shape}
     if args.arch == 'NIPS':
         network = NIPSPolicyVNetwork(network_conf)
     elif args.arch == 'SURP':
@@ -59,10 +64,14 @@ def get_arg_parser():
     #freeway
     #frostbite
     #montezuma_revenge
-    parser.add_argument('-g', default='breakout', help='Name of game', dest='game')
+
+    # RL parameters
+    parser.add_argument('-g', default='pong', help='Name of game', dest='game')
     parser.add_argument('-d', '--device', default='/gpu:0', type=str, help="Device to be used ('/cpu:0', /gpu:0, /gpu:1,...)", dest="device")
     parser.add_argument('--rom_path', default='/home/mikkel/ALE_roms/', help='Directory where the game roms are located (needed for ALE environment)', dest="rom_path")
     parser.add_argument('-v', '--visualize', default=False, type=bool_arg, help="0: no visualization of emulator; 1: all emulators, for all actors, are visualized; 2: only 1 emulator (for one of the actors) is visualized", dest="visualize")
+
+    # Native PAAC parameters
     parser.add_argument('--e', default=0.1, type=float, help="Epsilon for the Rmsprop and Adam optimizers", dest="e")
     parser.add_argument('--alpha', default=0.99, type=float, help="Discount factor for the history/coming gradient, for the Rmsprop optimizer", dest="alpha")
     parser.add_argument('-lr', '--initial_lr', default=0.0224, type=float, help="Initial value for the learning rate. Default = LogUniform(10**-4, 10**-2)", dest="initial_lr")
@@ -80,6 +89,20 @@ def get_arg_parser():
     parser.add_argument('-df', '--debugging_folder', default='debugging', type=str, help="Folder where to save the debugging information.", dest="debugging_folder")
     parser.add_argument('-rs', '--random_start', default=True, type=bool_arg, help="Whether or not to start with 30 noops for each env. Default True", dest="random_start")
     parser.add_argument('-af', '--arg_file', default=None, type=str, help="Path to the file from which to load args", dest="arg_file")
+
+    # Surprise-based exploration parameters
+    parser.add_argument('-p', '--surprise_policy', default='', type=str, help="Action policy ('' or 'surprise')", dest="surprise_policy")
+    parser.add_argument('-t', '--T', default=30, type=int, help="Number of stochastic feed forward passes per action. Default is 30.", dest="T")
+    parser.add_argument('-er', '--replay_size', default=16000, type=int, help="Max experience replay size. Default is 16k", dest="replay_size")
+    parser.add_argument('-ls', '--latent_shape', default=256, type=int, help="Size of the compressed latent layer. Default is 256", dest="latent_shape")
+    parser.add_argument('-sae', '--static_ae', default=4000000, type=int,
+                        help="How many time steps the autoencoder should be trained for. (setting to 0 gives continuous training)", dest="static_ae")
+
+
+    # Intrinsic rewards parameters
+    parser.add_argument('-iec', '--initial_exploration_const', default=0.8, type=float, help="Starting exploration constant. Default is .2", dest="initial_exploration_const")
+    parser.add_argument('-fec', '--final_exploration_const', default=0.01, type=int, help="The final exploration constant. Default is .01", dest="final_exploration_const")
+    parser.add_argument('-end_expl', '--end_exploration_discount', default=20000000, type=int, help="When to end the exploration discount. Default is 20m", dest="end_exploration_discount")
     return parser
 
 
