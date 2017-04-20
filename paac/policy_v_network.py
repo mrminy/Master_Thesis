@@ -102,22 +102,17 @@ class PolicyVDNetwork(Network):
                 # Autoencoder model ops
                 self.autoencoder_movement_focus_input_ph = tf.placeholder(tf.uint8, [None, 84, 84, 1],
                                                                           name='focus_autoencoder_input')
-                self.autoencoder_movement_focus_input = tf.pow(
-                    tf.add(tf.scalar_mul(1.0 / 255.0, tf.cast(self.autoencoder_movement_focus_input_ph, tf.float32)),
-                           1.0), 5.0)
+                self.autoencoder_movement_focus_input = tf.scalar_mul(2.0, tf.add(
+                    tf.ceil(tf.scalar_mul(1.0 / 255.0, tf.cast(self.autoencoder_movement_focus_input_ph, tf.float32))),
+                    1.0))
 
                 # MSE autoencoder loss
+                # self.autoencoder_loss_full = tf.pow(tf.subtract(self.autoencoder_input, self.autoencoder_output), 2)
                 self.autoencoder_loss_full = tf.pow(
                     tf.multiply(tf.subtract(self.autoencoder_input, self.autoencoder_output),
                                 self.autoencoder_movement_focus_input), 2)
                 self.autoencoder_loss = tf.reduce_mean(self.autoencoder_loss_full)
 
-                def vae_loss(x, x_decoded_mean):
-                    xent_loss = 7056 * metrics.binary_crossentropy(x, x_decoded_mean)
-                    kl_loss = - 0.5 * K.sum(1 + self.z_log_var - K.square(self.z_mean) - K.exp(self.z_log_var), axis=-1)
-                    return xent_loss + kl_loss
-
-                # self.autoencoder_loss = vae_loss(flatten(self.autoencoder_input), self.autoencoder_output)
                 self.autoencoder_optimizer = tf.train.AdamOptimizer().minimize(self.autoencoder_loss)
 
                 # Entropy: sum_a (-p_a ln p_a)

@@ -38,9 +38,8 @@ class PAACLearner(ActorLearner):
         self.exploration_discount = 1. / args.end_exploration_discount
 
         # Create replay memory
-        self.max_replay_size_autoencoder = args.replay_size
-        self.max_replay_size_dynamics = int(self.max_replay_size_autoencoder / self.emulator_counts)
-        self.replay_memory_autoencoder = deque(maxlen=self.max_replay_size_dynamics)
+        self.max_replay_size = args.replay_size
+        self.replay_memory_dynamics_model = deque(maxlen=int(self.max_replay_size / self.emulator_counts))
 
     @staticmethod
     def choose_next_actions(network, num_actions, states, session, emulator_counts=0, exploration_const=0):
@@ -65,7 +64,6 @@ class PAACLearner(ActorLearner):
         network_latent_var_prev = session.run(network.encoder_output,
                                               feed_dict={network.autoencoder_input_ph: autoencoder_states_prev})
 
-        # TODO try to do the next 15 lines in tensorflow on the gpu
         T = 30  # number of stochastic forward passes
         latent_repeat = np.repeat(network_latent_var, T, axis=0)
         prev_latent_repeat = np.repeat(network_latent_var_prev, T, axis=0)
@@ -96,7 +94,7 @@ class PAACLearner(ActorLearner):
 
         new_actions = np.eye(num_actions)[action_indices]
 
-        return new_actions, network_output_v, network_output_pi, network_latent_var, action_uncertainties
+        return new_actions, network_output_v, network_output_pi_w_surprise, network_latent_var, action_uncertainties
 
     def __choose_next_actions(self, states):
         # return PAACLearner.choose_next_actions(self.network, self.num_actions, states, self.emulator_counts,
@@ -271,7 +269,7 @@ class PAACLearner(ActorLearner):
             flat_autoencoder_diff_frames = np.subtract(flat_autoencoder_states, flat_autoencoder_next_states)
 
             # Store transition data in replay memory (prev, current, next, action, diff)
-            self.replay_memory_autoencoder.append(
+            self.replay_memory_dynamics_model.append(
                 (flat_autoencoder_prev_states, flat_autoencoder_states, flat_autoencoder_next_states,
                  flat_autoencoder_actions, flat_autoencoder_diff_frames))
 
@@ -319,10 +317,14 @@ class PAACLearner(ActorLearner):
         self.do_plotting()
 
     def update_reward_bonus(self, states, actions, all_ae_loss):
+        T = 30  # number of stochastic forward passes
+        # action_uncertainties = np.zeros((self.emulator_counts, self.network.latent_shape))
+
         for t in range(self.max_local_steps):
             autoencoder_states_next = states[t, :, :, :, -1].reshape(self.emulator_counts, 84, 84, 1)
             autoencoder_states = states[t, :, :, :, -2].reshape(self.emulator_counts, 84, 84, 1)
             autoencoder_states_prev = states[t, :, :, :, -3].reshape(self.emulator_counts, 84, 84, 1)
+            actions_t = actions[t, :, :]
 
             # This is faster if GPU has enough mem
             all_states = np.concatenate((autoencoder_states_prev, autoencoder_states, autoencoder_states_next))
@@ -341,24 +343,38 @@ class PAACLearner(ActorLearner):
             # feed_dict = {self.network.autoencoder_input_ph: autoencoder_states_next}
             # next_latent_vars = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
 
-            feed_dict = {self.network.dynamics_input_prev: prev_latent_vars,
-                         self.network.dynamics_input: curr_latent_vars,
-                         self.network.dynamics_latent_target: next_latent_vars,
-                         self.network.action_input: actions[t, :, :],
-                         self.network.keep_prob: 1.}
-            dynamics_loss = self.session.run(self.network.dynamics_loss_full, feed_dict=feed_dict)
+            # Calculate dynamics error
+            # feed_dict = {self.network.dynamics_input_prev: prev_latent_vars,
+            #              self.network.dynamics_input: curr_latent_vars,
+            #              self.network.dynamics_latent_target: next_latent_vars,
+            #              self.network.action_input: actions_t,
+            #              self.network.keep_prob: 1.}
+            # dynamics_loss = self.session.run(self.network.dynamics_loss_full, feed_dict=feed_dict)
+            # dynamics_loss = dynamics_loss.reshape((self.emulator_counts, self.network.latent_shape)).mean(axis=1)
 
-            dynamics_loss = dynamics_loss.reshape((self.emulator_counts, self.network.latent_shape)).mean(axis=1)
-            all_ae_loss[t] = dynamics_loss * self.__get_exploration_const()
+            # Calculate MC dropout surprise
+            prev_latent_repeat = np.repeat(prev_latent_vars, T, axis=0)
+            curr_latent_repeat = np.repeat(curr_latent_vars, T, axis=0)
+            action_repeat = np.repeat(actions_t, T, axis=0)
+            feed_dict = {self.network.keep_prob: .9, self.network.dynamics_input_prev: prev_latent_repeat,
+                         self.network.dynamics_input: curr_latent_repeat, self.network.action_input: action_repeat}
+            variance_output = self.session.run(self.network.latent_prediction, feed_dict=feed_dict)
+            variance_output = variance_output.reshape(self.emulator_counts, T, self.network.latent_shape)
+            action_uncertainties = np.mean(np.multiply(np.std(variance_output, axis=1), 2), axis=1)
+
+            # Add all intrinsic rewards and discount based on time step
+            # all_ae_loss[t] = np.add(dynamics_loss, action_uncertainties) * self.__get_exploration_const()
+            all_ae_loss[t] = action_uncertainties * self.__get_exploration_const()
+            # all_ae_loss[t] = dynamics_loss * self.__get_exploration_const()
 
     def train_dynamics_model(self):
         # Optimize autoencoder
         num_epochs = 100
         autoencoder_loss = 0.
         dynamics_loss = 0.
-        if 50000 < self.global_step:
+        if self.global_step > self.max_replay_size:
             for i in range(num_epochs):
-                sample = random.sample(self.replay_memory_autoencoder, 1)[0]
+                sample = random.sample(self.replay_memory_dynamics_model, 1)[0]
                 idx_batch = np.random.randint(len(sample[0]), size=32)  # Find random batch
                 minibatch_prev_frames = sample[0][idx_batch]
                 minibatch_curr_frames = sample[1][idx_batch]
@@ -369,11 +385,11 @@ class PAACLearner(ActorLearner):
                     self.network.autoencoder_input_ph: minibatch_curr_frames,
                     self.network.autoencoder_movement_focus_input_ph: minibatch_focus}
 
-                if self.global_step < self.static_ae or self.static_ae == 0:
+                if self.global_step < self.static_ae or self.static_ae == 0: # TODO remove static AE --> should be dynamically trained all the time
                     # Train AE
-                    _, autoencoder_loss, latent_vars = self.session.run(
+                    _, autoencoder_loss, latent_vars, autoencoder_movement_focus_input = self.session.run(
                         [self.network.autoencoder_optimizer, self.network.autoencoder_loss,
-                         self.network.encoder_output], feed_dict=feed_dict)
+                         self.network.encoder_output, self.network.autoencoder_movement_focus_input], feed_dict=feed_dict)
                 else:
                     # Static AE
                     autoencoder_loss, latent_vars = self.session.run(
@@ -398,7 +414,7 @@ class PAACLearner(ActorLearner):
     def do_plotting(self, save_imgs=True):
         # Plot autoencoder
         n_imgs = 4
-        sample = random.sample(self.replay_memory_autoencoder, 1)[0]
+        sample = random.sample(self.replay_memory_dynamics_model, 1)[0]
         idx_batch = np.arange(n_imgs)
         minibatch_prev_frames = sample[0][idx_batch]
         minibatch_curr_frames = sample[1][idx_batch]

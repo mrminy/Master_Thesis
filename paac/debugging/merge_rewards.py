@@ -57,7 +57,7 @@ def merge_data(configs, max_time_steps, window_size=200, samples=50000, show_plo
 
     if save_file is not None:
         for s in range(samples):
-            stats_logger.log('avg', x_interpolated[s], '', y_points_avg[s], y_points_avg_moving_avg[s])
+            stats_logger.log('avg', x_interpolated[s], 0, y_points_avg[s], y_points_avg_moving_avg[s])
 
 
 if __name__ == '__main__':

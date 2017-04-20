@@ -27,7 +27,7 @@ def get_save_frame(dest_folder, name):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--folder', type=str, help="Folder where to save the debugging information.", dest="folder")
+    parser.add_argument('-f', '--folder', default='debugging/', type=str, help="Folder where to save the debugging information.", dest="folder")
     parser.add_argument('-tc', '--test_count', default='30', type=int, help="The amount of tests to run on the given network", dest="test_count")
     parser.add_argument('-re', '--random_eval', default=False, type=bool_arg, help="Whether or not to use 35 random steps", dest="random_eval")
     parser.add_argument('-s', '--show', default=False, type=bool_arg, help="Whether or not to show the run", dest="show")
@@ -75,6 +75,6 @@ if __name__ == '__main__':
                 reward += r
             rewards.append(reward)
             print(reward)
-        print(np.mean(rewards), np.min(rewards), np.max(rewards), np.std(rewards))
+        print("Mean:", np.mean(rewards), "Min:", np.min(rewards), "Max:", np.max(rewards), "Std:", np.std(rewards))
 
 

@@ -16,7 +16,7 @@ def show_plot(configs, window_size, show_legend=False, max_time_steps=None):
             x_axis = []
             y_axes = []
             for row in reader:
-                time_steps = int(row[x_idx])
+                time_steps = float(row[x_idx])
                 if max_time_steps is not None and time_steps >= max_time_steps:
                     break
                 x_axis.append(time_steps)
