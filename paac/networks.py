@@ -6,6 +6,7 @@ from keras.engine import Input
 from keras.engine import Model
 from keras.layers import Convolution2D, MaxPooling2D, Dense, Reshape, UpSampling2D, K, Lambda, Deconvolution2D
 from keras import metrics
+from tensorflow.contrib.tensorboard.plugins import projector
 
 
 def flatten(_input):
@@ -158,6 +159,15 @@ class Network(object):
         import os
         if not os.path.exists(debugging_folder + '/checkpoints/'):
             os.makedirs(debugging_folder + '/checkpoints/')
+
+        if not os.path.exists(debugging_folder + '/autoencoder_imgs/'):
+            os.makedirs(debugging_folder + '/autoencoder_imgs/')
+
+        if not os.path.exists(debugging_folder + '/dynamics_imgs/'):
+            os.makedirs(debugging_folder + '/dynamics_imgs/')
+
+        # if not os.path.exists(debugging_folder + '/embeddings/'):
+        #     os.makedirs(debugging_folder + '/embeddings/')
 
         last_saving_step = 0
         self.saver = tf.train.Saver()
