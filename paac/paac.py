@@ -299,7 +299,8 @@ class PAACLearner(ActorLearner):
                                   self.stats_logger.get_stats_for_array(flat_adv_batch),
                                   self.stats_logger.get_stats_for_array(flat_y_batch), Rs_stats,
                                   self.stats_logger.get_stats_for_array(value_discrepancy), dynamics_loss_mean,
-                                  autoencoder_loss_mean, mean_action_uncertainty, std_action_uncertainty, avg_reward_bonus)
+                                  autoencoder_loss_mean, mean_action_uncertainty, std_action_uncertainty,
+                                  avg_reward_bonus)
 
             if counter % (2048 / self.emulator_counts) == 0:
                 curr_time = time.time()
@@ -310,7 +311,8 @@ class PAACLearner(ActorLearner):
                         .format(global_steps,
                                 self.max_local_steps * self.emulator_counts / (curr_time - loop_start_time),
                                 (global_steps - global_step_start) / (curr_time - start_time),
-                                last_ten, dynamics_loss_mean, autoencoder_loss_mean, std_action_uncertainty, avg_reward_bonus))
+                                last_ten, dynamics_loss_mean, autoencoder_loss_mean, std_action_uncertainty,
+                                avg_reward_bonus))
 
             if counter % (40960 / self.emulator_counts) == 0:
                 self.do_plotting()
@@ -349,9 +351,9 @@ class PAACLearner(ActorLearner):
 
             # Calculate AE loss bonus adjustment
             ae_loss_adjustment = 1.
-            ae_loss_limit = self.autoencoder_loss + (2*self.autoencoder_loss_std)
+            ae_loss_limit = self.autoencoder_loss + (2 * self.autoencoder_loss_std)
             if ae_loss > ae_loss_limit:
-                ae_loss_adjustment = 1. + ((ae_loss - self.autoencoder_loss) / (2*self.autoencoder_loss_std))
+                ae_loss_adjustment = 1. + ((ae_loss - self.autoencoder_loss) / (2 * self.autoencoder_loss_std))
 
             # Slower, but require lower GPU mem usage
             # feed_dict = {self.network.autoencoder_input_ph: autoencoder_states}
@@ -381,7 +383,7 @@ class PAACLearner(ActorLearner):
             action_uncertainties = np.mean(np.multiply(np.std(variance_output, axis=1), 2), axis=1)
 
             # To keep a decent value for different kinds of numbers of actions
-            action_uncertainties = np.multiply(action_uncertainties, self.num_actions/6)
+            action_uncertainties = np.multiply(action_uncertainties, self.num_actions / 6)
 
             # Add all intrinsic rewards and discount based on time step
             # all_ae_loss[t] = np.add(dynamics_loss, action_uncertainties) * self.__get_exploration_const()

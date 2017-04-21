@@ -1,4 +1,5 @@
 import csv
+from sklearn import metrics
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -267,10 +268,23 @@ class StatsPrinter:
                     values.append(v)
                 time_steps = np.array(time_steps)
                 values = np.array(values)
+
+                in_order = True
+                for i in range(1, len(time_steps)):
+                    if time_steps[i] < time_steps[i - 1]:
+                        in_order = False
+                        break
+                auc_score = None
+                if in_order:
+                    auc_score = metrics.auc(time_steps, values)
+                    auc_score /= time_steps[-1]
+
                 out += str(config) + '\n'
                 out += 'Avg: ' + str(np.mean(values, axis=0)) + '\n'
+                out += 'AUC: ' + str(auc_score) + '\n'
                 out += 'Sum: ' + str(np.sum(values, axis=0)) + '\n'
                 out += 'Max: ' + str(np.max(values, axis=0)) + '\n'
+
         print(out)
 
 

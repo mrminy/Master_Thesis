@@ -1,3 +1,4 @@
+import random
 from collections import deque
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
@@ -44,7 +45,9 @@ def get_save_frame(dest_folder, name):
         im.save("{}/{}_{:05d}.png".format(dest_folder, name, counter.get()))
         counter.increase()
         return False
+
     return get_frame
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -56,7 +59,8 @@ if __name__ == '__main__':
                         help="Whether or not to use 35 random steps", dest="random_eval")
     parser.add_argument('-s', '--show', default=False, type=bool_arg, help="Whether or not to show the run",
                         dest="show")
-    parser.add_argument('-ep', '--embedding_plot', default=False, type=bool_arg, help="Whether or not to show the TSNE embedding with images",
+    parser.add_argument('-ep', '--embedding_plot', default=False, type=bool_arg,
+                        help="Whether or not to show the TSNE embedding with images",
                         dest="embedding_plot")
     parser.add_argument('-gf', '--gif_folder', default=None, type=str, help="The folder to save the gifs",
                         dest="gif_folder")
@@ -80,8 +84,9 @@ if __name__ == '__main__':
     rng = np.random.RandomState(int(time.time()))
     args.random_seed = rng.randint(1000)
 
-    img_database = deque(maxlen=200)
-    latent_database = deque(maxlen=200)
+    db_size = 5000
+    img_database = deque(maxlen=db_size)
+    latent_database = deque(maxlen=db_size)
 
     network, env_creator = get_network_and_environment_creator(args)
 
@@ -103,10 +108,11 @@ if __name__ == '__main__':
             episode_over = False
             reward = 0.0
             while not episode_over:
-                latent_var = sess.run(network.encoder_output, feed_dict={
-                    network.autoencoder_input_ph: np.array([state[:, :, 0]]).reshape(1, 84, 84, 1)})
-                img_database.append(state[:, :, 0])
-                latent_database.append(latent_var[0])
+                if random.random() < 0.2:
+                    latent_var = sess.run(network.encoder_output, feed_dict={
+                        network.autoencoder_input_ph: np.array([state[:, :, 0]]).reshape(1, 84, 84, 1)})
+                    img_database.append(state[:, :, 0])
+                    latent_database.append(latent_var[0])
 
                 action = PAACLearner.choose_next_actions(network, env_creator.num_actions, [state], sess)
                 state, r, episode_over = environment.next(action[0])
@@ -116,14 +122,19 @@ if __name__ == '__main__':
         print("Mean:", np.mean(rewards), "Min:", np.min(rewards), "Max:", np.max(rewards), "Std:", np.std(rewards))
 
     if args.embedding_plot:
-        manifold = TSNE(n_components=2, perplexity=20)
+        manifold = TSNE(n_components=2)
         x_fitted = manifold.fit(np.array(latent_database))
         print("Plotting")
         fig, ax = plt.subplots()
-        for i in range(50):
-            x = x_fitted.embedding_[i][0]
-            y = x_fitted.embedding_[i][1]
-            img = img_database[i]
+        num_imgs = 25
+        idx = np.random.randint(len(img_database), size=num_imgs)  # Find random batch
+        # x_batch = np.array(latent_database)[idx]
+        # x_fitted = manifold.fit(x_batch)
+
+        for i in range(num_imgs):
+            x = x_fitted.embedding_[idx[i]][0]
+            y = x_fitted.embedding_[idx[i]][1]
+            img = img_database[idx[i]]
             imscatter(x, y, img, ax=ax, zoom=.7)
             ax.plot(x, y)
         plt.show()

@@ -4,9 +4,8 @@ import numpy as np
 import tensorflow as tf
 from keras.engine import Input
 from keras.engine import Model
-from keras.layers import Convolution2D, MaxPooling2D, Dense, Reshape, UpSampling2D, K, Lambda, Deconvolution2D
+from keras.layers import Convolution2D, MaxPooling2D, Dense, Reshape, UpSampling2D, K, Lambda, Deconvolution2D, Layer
 from keras import metrics
-from tensorflow.contrib.tensorboard.plugins import projector
 
 
 def flatten(_input):
@@ -242,33 +241,60 @@ class DynamicsNetwork(Network):
                 self.latent_prediction = pred3
 
     def build_vae_architecture(self):
-        pass
         # VAE test
-        # batch_size = 32
-        # intermediate_dim = 3136
-        # original_dim = 7056
-        # epsilon_std = 1.0
-        # self.z_mean = Dense(self.latent_shape)(self.encoder_output)
-        # self.z_log_var = Dense(self.latent_shape)(self.encoder_output)
-        #
-        # def sampling(args):
-        #     z_mean, z_log_var = args
-        #     epsilon = K.random_normal(shape=(4, self.latent_shape), mean=0., std=epsilon_std)
-        #     return z_mean + K.exp(z_log_var / 2) * epsilon
-        #
-        # z = Lambda(sampling)([self.z_mean, self.z_log_var])
-        #
-        # # we instantiate these layers separately so as to reuse them later
-        # decoder_h = Dense(intermediate_dim, activation='relu')
-        # decoder_mean = Dense(original_dim, activation='sigmoid')
-        # h_decoded = decoder_h(z)
-        # x_decoded_mean = decoder_mean(h_decoded)
-        #
-        # self.autoencoder_output = x_decoded_mean
-        # self.encoder_output = self.z_mean
-        # _h_decoded = decoder_h(self.decoder_input)
-        # _x_decoded_mean = decoder_mean(_h_decoded)
-        # self.decoder_output = _x_decoded_mean
+        batch_size = 32
+        intermediate_dim = 3136
+        original_dim = 7056
+        latent_dim = 256
+        epsilon_std = 1.0
+
+        x = Input(batch_shape=(batch_size, original_dim))
+        h = Dense(intermediate_dim, activation='relu')(x)
+        z_mean = Dense(latent_dim)(h)
+        z_log_var = Dense(latent_dim)(h)
+
+        def sampling(args):
+            z_mean, z_log_var = args
+            epsilon = K.random_normal(shape=(4, self.latent_shape), mean=0., std=epsilon_std)
+            return z_mean + K.exp(z_log_var / 2) * epsilon
+
+        z = Lambda(sampling)([z_mean, z_log_var])
+
+        decoder_h = Dense(intermediate_dim, activation='relu')
+        decoder_mean = Dense(original_dim, activation='sigmoid')
+        h_decoded = decoder_h(z)
+        x_decoded_mean = decoder_mean(h_decoded)
+
+        # Custom loss layer
+        class CustomVariationalLayer(Layer):
+            def __init__(self, **kwargs):
+                self.is_placeholder = True
+                super(CustomVariationalLayer, self).__init__(**kwargs)
+
+            def vae_loss(self, x, x_decoded_mean):
+                xent_loss = original_dim * metrics.binary_crossentropy(x, x_decoded_mean)
+                kl_loss = - 0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
+                return K.mean(xent_loss + kl_loss)
+
+            def call(self, inputs, **kwargs):
+                x = inputs[0]
+                x_decoded_mean = inputs[1]
+                loss = self.vae_loss(x, x_decoded_mean)
+                self.add_loss(loss, inputs=inputs)
+                # We won't actually use the output.
+                return x
+
+        y = CustomVariationalLayer()([x, x_decoded_mean])
+        vae = Model(x, y)
+        vae.compile(optimizer='adam', loss=None)
+        self.autoencoder_output = vae
+
+        self.encoder_output = Model(x, z_mean)
+
+        decoder_input = Input(shape=(latent_dim,))
+        _h_decoded = decoder_h(decoder_input)
+        _x_decoded_mean = decoder_mean(_h_decoded)
+        self.decoder_output = Model(decoder_input, _x_decoded_mean)
 
     def build_action_cond_architecture(self):
         # Encoder
