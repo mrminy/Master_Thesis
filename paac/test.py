@@ -59,7 +59,7 @@ if __name__ == '__main__':
                         help="Whether or not to use 35 random steps", dest="random_eval")
     parser.add_argument('-s', '--show', default=False, type=bool_arg, help="Whether or not to show the run",
                         dest="show")
-    parser.add_argument('-ep', '--embedding_plot', default=False, type=bool_arg,
+    parser.add_argument('-ep', '--embedding_plot', default=True, type=bool_arg,
                         help="Whether or not to show the TSNE embedding with images",
                         dest="embedding_plot")
     parser.add_argument('-gf', '--gif_folder', default=None, type=str, help="The folder to save the gifs",
@@ -126,10 +126,8 @@ if __name__ == '__main__':
         x_fitted = manifold.fit(np.array(latent_database))
         print("Plotting")
         fig, ax = plt.subplots()
-        num_imgs = 25
+        num_imgs = 30
         idx = np.random.randint(len(img_database), size=num_imgs)  # Find random batch
-        # x_batch = np.array(latent_database)[idx]
-        # x_fitted = manifold.fit(x_batch)
 
         for i in range(num_imgs):
             x = x_fitted.embedding_[idx[i]][0]

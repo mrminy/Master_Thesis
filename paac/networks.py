@@ -135,8 +135,8 @@ class Network(object):
         self.decoder_input = None
         self.latent_prediction = None
 
-        self.z_mean = None
-        self.z_log_var = None
+        self.mu = None
+        self.log_sigma = None
 
         with tf.device(self.device):
             with tf.name_scope(self.name):
@@ -228,7 +228,7 @@ class DynamicsNetwork(Network):
                 _, _, fc3 = fc('fc3', flatten(conv2), 256, activation="relu")
                 self.output = fc3
 
-                self.build_action_cond_architecture()
+                self.build_variational_architecture()
 
                 # Prediction on latent space
                 prediction_input = tf.concat([self.dynamics_input_prev, self.dynamics_input, self.action_input], axis=1,
@@ -240,63 +240,81 @@ class DynamicsNetwork(Network):
                 _, _, pred3 = fc('pred3', pred2, self.latent_shape, activation="tanh")
                 self.latent_prediction = pred3
 
-    def build_vae_architecture(self):
-        # VAE test
-        batch_size = 32
-        intermediate_dim = 3136
-        original_dim = 7056
-        latent_dim = 256
-        epsilon_std = 1.0
+    def build_variational_architecture(self):
+        e1 = Convolution2D(64, 6, 6, subsample=(2, 2), activation='relu', border_mode='valid', name='e1')(
+            self.autoencoder_input)
+        e3 = Convolution2D(64, 6, 6, subsample=(2, 2), activation='relu', border_mode='same', name='e3')(e1)
+        e4 = Convolution2D(64, 6, 6, subsample=(2, 2), activation='relu', border_mode='same', name='e4')(e3)
 
-        x = Input(batch_shape=(batch_size, original_dim))
-        h = Dense(intermediate_dim, activation='relu')(x)
-        z_mean = Dense(latent_dim)(h)
-        z_log_var = Dense(latent_dim)(h)
+        h_q = Dense(512, activation='relu')(flatten(e4))
+        # h_q = flatten(e4)
+        # h_q = e4
+        self.mu = Dense(self.latent_shape, activation='linear')(h_q)
+        self.log_sigma = Dense(self.latent_shape, activation='linear')(h_q)
 
-        def sampling(args):
-            z_mean, z_log_var = args
-            epsilon = K.random_normal(shape=(4, self.latent_shape), mean=0., std=epsilon_std)
-            return z_mean + K.exp(z_log_var / 2) * epsilon
+        batch_size = tf.shape(self.autoencoder_input)[0]
 
-        z = Lambda(sampling)([z_mean, z_log_var])
+        def sample_z(args):
+            mu, log_sigma = args
+            eps = K.random_normal(shape=(batch_size, self.latent_shape), mean=0., std=1.)
+            return mu + K.exp(log_sigma / 2) * eps
 
-        decoder_h = Dense(intermediate_dim, activation='relu')
-        decoder_mean = Dense(original_dim, activation='sigmoid')
-        h_decoded = decoder_h(z)
-        x_decoded_mean = decoder_mean(h_decoded)
+        # Sample z
+        z = Lambda(sample_z)([self.mu, self.log_sigma])
 
-        # Custom loss layer
-        class CustomVariationalLayer(Layer):
-            def __init__(self, **kwargs):
-                self.is_placeholder = True
-                super(CustomVariationalLayer, self).__init__(**kwargs)
+        # Decoder layers
+        d1 = Dense(6400, activation='relu', name='d1')
+        d2 = Reshape((10, 10, 64), name='d2')
+        d3 = Deconvolution2D(64, 6, 6, output_shape=(None, 20, 20, 64), subsample=(2, 2), activation='relu',
+                             border_mode='same', name='d3')
+        d4 = Deconvolution2D(64, 6, 6, output_shape=(None, 40, 40, 64), subsample=(2, 2), activation='relu',
+                             border_mode='same', name='d4')
+        d5 = Deconvolution2D(1, 6, 6, output_shape=(None, 84, 84, 1), subsample=(2, 2), activation='sigmoid',
+                             border_mode='valid', name='d5')
 
-            def vae_loss(self, x, x_decoded_mean):
-                xent_loss = original_dim * metrics.binary_crossentropy(x, x_decoded_mean)
-                kl_loss = - 0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
-                return K.mean(xent_loss + kl_loss)
+        # Full autoencoder
+        d1_full = d1(z)
+        d2_full = d2(d1_full)
+        d3_full = d3(d2_full)
+        d4_full = d4(d3_full)
+        d5_full = d5(d4_full)
+        d7_full = Reshape((7056,))(d5_full)
 
-            def call(self, inputs, **kwargs):
-                x = inputs[0]
-                x_decoded_mean = inputs[1]
-                loss = self.vae_loss(x, x_decoded_mean)
-                self.add_loss(loss, inputs=inputs)
-                # We won't actually use the output.
-                return x
+        # Only decoding
+        d1_decoder = d1(self.decoder_input)
+        d2_decoder = d2(d1_decoder)
+        d3_decoder = d3(d2_decoder)
+        d4_decoder = d4(d3_decoder)
+        d5_decoder = d5(d4_decoder)
+        d7_decoder = Reshape((7056,))(d5_decoder)
 
-        y = CustomVariationalLayer()([x, x_decoded_mean])
-        vae = Model(x, y)
-        vae.compile(optimizer='adam', loss=None)
-        self.autoencoder_output = vae
+        self.decoder_output = d7_decoder
+        self.autoencoder_output = d7_full
+        self.encoder_output = self.mu
 
-        self.encoder_output = Model(x, z_mean)
+        # decoder_hidden = Dense(512, activation='relu')
+        # decoder_out = Dense(7056, activation='sigmoid')
 
-        decoder_input = Input(shape=(latent_dim,))
-        _h_decoded = decoder_h(decoder_input)
-        _x_decoded_mean = decoder_mean(_h_decoded)
-        self.decoder_output = Model(decoder_input, _x_decoded_mean)
+        # h_p = decoder_hidden(z)
+        # outputs = decoder_out(h_p)
 
-    def build_action_cond_architecture(self):
+        # Overall VAE model, for reconstruction and training
+        # vae = Model(inputs, outputs)
+        # self.autoencoder_output = outputs
+
+        # Encoder model, to encode input into latent variable
+        # We use the mean as the output as it is the center point, the representative of the gaussian
+        # encoder = Model(inputs, self.mu)
+        # self.encoder_output = self.mu
+
+        # Generator model, generate new data given latent variable z
+        # d_in = Input(shape=(n_z,))
+        # d_h = decoder_hidden(self.decoder_input)
+        # d_out = decoder_out(d_h)
+        # decoder = Model(d_in, d_out)
+        # self.decoder_output = d_out
+
+    def build_conv_deconv_architecture(self):
         # Encoder
         e1 = Convolution2D(64, 6, 6, subsample=(2, 2), activation='relu', border_mode='valid', name='e1')(
             self.autoencoder_input)
@@ -307,15 +325,14 @@ class DynamicsNetwork(Network):
         self.encoder_output = e6
 
         # Decoder layers
-        d1 = Dense(6400, activation='relu', name='d1')  # (self.encoder_output)
-        # d2 = Dense(6400, activation='relu', name='d2')#(d1)
-        d2 = Reshape((10, 10, 64), name='d2')  # (d2)
+        d1 = Dense(6400, activation='relu', name='d1')
+        d2 = Reshape((10, 10, 64), name='d2')
         d3 = Deconvolution2D(64, 6, 6, output_shape=(None, 20, 20, 64), subsample=(2, 2), activation='relu',
-                             border_mode='same', name='d3')  # (d3)
+                             border_mode='same', name='d3')
         d4 = Deconvolution2D(64, 6, 6, output_shape=(None, 40, 40, 64), subsample=(2, 2), activation='relu',
-                             border_mode='same', name='d4')  # (d4)
+                             border_mode='same', name='d4')
         d5 = Deconvolution2D(1, 6, 6, output_shape=(None, 84, 84, 1), subsample=(2, 2), border_mode='valid',
-                             name='d5')  # (d5)
+                             name='d5')
 
         # Full autoencoder
         d1_full = d1(self.encoder_output)
@@ -323,7 +340,6 @@ class DynamicsNetwork(Network):
         d3_full = d3(d2_full)
         d4_full = d4(d3_full)
         d5_full = d5(d4_full)
-        # d6_full = d6(d5_full)
         d7_full = d5_full
 
         # Only decoding
@@ -332,13 +348,12 @@ class DynamicsNetwork(Network):
         d3_decoder = d3(d2_decoder)
         d4_decoder = d4(d3_decoder)
         d5_decoder = d5(d4_decoder)
-        # d6_decoder = d6(d5_decoder)
         d7_decoder = d5_decoder
 
         self.decoder_output = d7_decoder
         self.autoencoder_output = d7_full
 
-    def build_my_autoencoder_architecture(self):
+    def build_conv_max_pool_architecture(self):
         # Encoder
         e1 = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='e1')(self.autoencoder_input)
         e2 = MaxPooling2D((2, 2), border_mode='same', name='e2')(e1)

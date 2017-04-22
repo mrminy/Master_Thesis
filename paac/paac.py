@@ -314,7 +314,7 @@ class PAACLearner(ActorLearner):
                                 last_ten, dynamics_loss_mean, autoencoder_loss_mean, std_action_uncertainty,
                                 avg_reward_bonus))
 
-            if counter % (40960 / self.emulator_counts) == 0:
+            if counter % (4096 / self.emulator_counts) == 0:
                 self.do_plotting()
 
             self.save_vars()
@@ -352,7 +352,7 @@ class PAACLearner(ActorLearner):
             # Calculate AE loss bonus adjustment
             ae_loss_adjustment = 1.
             ae_loss_limit = self.autoencoder_loss + (2 * self.autoencoder_loss_std)
-            if ae_loss > ae_loss_limit:
+            if False and ae_loss > ae_loss_limit: # TODO
                 ae_loss_adjustment = 1. + ((ae_loss - self.autoencoder_loss) / (2 * self.autoencoder_loss_std))
 
             # Slower, but require lower GPU mem usage

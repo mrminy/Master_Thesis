@@ -3,7 +3,7 @@ from multiprocessing import Process
 import tensorflow as tf
 import logging
 
-CHECKPOINT_INTERVAL = 1000000
+CHECKPOINT_INTERVAL = 500000
  
 
 class ActorLearner(Process):
