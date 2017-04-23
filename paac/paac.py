@@ -351,9 +351,15 @@ class PAACLearner(ActorLearner):
 
             # Calculate AE loss bonus adjustment
             ae_loss_adjustment = 1.
-            ae_loss_limit = self.autoencoder_loss + (2 * self.autoencoder_loss_std)
-            if False and ae_loss > ae_loss_limit: # TODO
-                ae_loss_adjustment = 1. + ((ae_loss - self.autoencoder_loss) / (2 * self.autoencoder_loss_std))
+            ae_loss_limit_max = self.autoencoder_loss + (2 * self.autoencoder_loss_std)
+            ae_loss_limit_min = self.autoencoder_loss - (2 * self.autoencoder_loss_std)
+            if self.autoencoder_loss_std != 0.:
+                if ae_loss > ae_loss_limit_max:
+                    ae_loss_adjustment = min(2.0,
+                                             1. + ((ae_loss - ae_loss_limit_max) / (2 * self.autoencoder_loss_std)))
+                elif ae_loss < ae_loss_limit_min:
+                    ae_loss_adjustment = max(0.1,
+                                             1. - ((ae_loss_limit_min - ae_loss) / (2 * self.autoencoder_loss_std)))
 
             # Slower, but require lower GPU mem usage
             # feed_dict = {self.network.autoencoder_input_ph: autoencoder_states}

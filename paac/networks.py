@@ -120,6 +120,7 @@ class Network(object):
 
         # Vars used in dynamics model
         self.latent_shape = conf['latent_shape']
+        self.ae_arch = conf['ae_arch']
         self.keep_prob = tf.placeholder(tf.float32)  # For dropout
         self.dynamics_input = tf.placeholder("float32", [None, self.latent_shape],
                                              name="latent_input")
@@ -220,6 +221,14 @@ class DynamicsNetwork(Network):
     def __init__(self, conf):
         super(DynamicsNetwork, self).__init__(conf)
 
+        self.autoencoder_movement_focus_input_ph = tf.placeholder(tf.uint8, [None, 84, 84, 1],
+                                                                  name='focus_autoencoder_input')
+        self.autoencoder_movement_focus_input = tf.scalar_mul(2.0, tf.add(
+            tf.ceil(tf.scalar_mul(1.0 / 255.0, tf.cast(self.autoencoder_movement_focus_input_ph, tf.float32))),
+            1.0))
+
+        self.autoencoder_loss = None
+
         with tf.device(self.device):
             with tf.name_scope(self.name):
                 # NIPS network
@@ -228,7 +237,15 @@ class DynamicsNetwork(Network):
                 _, _, fc3 = fc('fc3', flatten(conv2), 256, activation="relu")
                 self.output = fc3
 
-                self.build_variational_architecture()
+                # Build selected AE architecture
+                if self.ae_arch == 'FC':
+                    self.build_fc_architecture()
+                elif self.ae_arch == 'CMP':
+                    self.build_conv_max_pool_architecture()
+                elif self.ae_arch == 'VCD':
+                    self.build_variational_architecture()
+                else:
+                    self.build_conv_deconv_architecture()
 
                 # Prediction on latent space
                 prediction_input = tf.concat([self.dynamics_input_prev, self.dynamics_input, self.action_input], axis=1,
@@ -247,8 +264,6 @@ class DynamicsNetwork(Network):
         e4 = Convolution2D(64, 6, 6, subsample=(2, 2), activation='relu', border_mode='same', name='e4')(e3)
 
         h_q = Dense(512, activation='relu')(flatten(e4))
-        # h_q = flatten(e4)
-        # h_q = e4
         self.mu = Dense(self.latent_shape, activation='linear')(h_q)
         self.log_sigma = Dense(self.latent_shape, activation='linear')(h_q)
 
@@ -292,27 +307,10 @@ class DynamicsNetwork(Network):
         self.autoencoder_output = d7_full
         self.encoder_output = self.mu
 
-        # decoder_hidden = Dense(512, activation='relu')
-        # decoder_out = Dense(7056, activation='sigmoid')
-
-        # h_p = decoder_hidden(z)
-        # outputs = decoder_out(h_p)
-
-        # Overall VAE model, for reconstruction and training
-        # vae = Model(inputs, outputs)
-        # self.autoencoder_output = outputs
-
-        # Encoder model, to encode input into latent variable
-        # We use the mean as the output as it is the center point, the representative of the gaussian
-        # encoder = Model(inputs, self.mu)
-        # self.encoder_output = self.mu
-
-        # Generator model, generate new data given latent variable z
-        # d_in = Input(shape=(n_z,))
-        # d_h = decoder_hidden(self.decoder_input)
-        # d_out = decoder_out(d_h)
-        # decoder = Model(d_in, d_out)
-        # self.decoder_output = d_out
+        recon = K.sum(tf.multiply(K.binary_crossentropy(self.autoencoder_output, flatten(self.autoencoder_input)),
+                                  flatten(self.autoencoder_movement_focus_input)), axis=1)
+        kl = 0.5 * K.sum(K.exp(self.log_sigma) + K.square(self.mu) - 1. - self.log_sigma, axis=1)
+        self.autoencoder_loss = recon + kl
 
     def build_conv_deconv_architecture(self):
         # Encoder
@@ -320,9 +318,8 @@ class DynamicsNetwork(Network):
             self.autoencoder_input)
         e3 = Convolution2D(64, 6, 6, subsample=(2, 2), activation='relu', border_mode='same', name='e3')(e1)
         e4 = Convolution2D(64, 6, 6, subsample=(2, 2), activation='relu', border_mode='same', name='e4')(e3)
-        # e5 = Dense(2048, activation='relu', name='e5')(flatten(e4))
-        e6 = Dense(self.latent_shape, activation='relu', name='e6')(flatten(e4))
-        self.encoder_output = e6
+        e5 = Dense(self.latent_shape, activation='relu', name='e5')(flatten(e4))
+        self.encoder_output = e5
 
         # Decoder layers
         d1 = Dense(6400, activation='relu', name='d1')
@@ -331,8 +328,7 @@ class DynamicsNetwork(Network):
                              border_mode='same', name='d3')
         d4 = Deconvolution2D(64, 6, 6, output_shape=(None, 40, 40, 64), subsample=(2, 2), activation='relu',
                              border_mode='same', name='d4')
-        d5 = Deconvolution2D(1, 6, 6, output_shape=(None, 84, 84, 1), subsample=(2, 2), border_mode='valid',
-                             name='d5')
+        d5 = Deconvolution2D(1, 6, 6, output_shape=(None, 84, 84, 1), subsample=(2, 2), border_mode='valid', name='d5')
 
         # Full autoencoder
         d1_full = d1(self.encoder_output)
@@ -352,6 +348,12 @@ class DynamicsNetwork(Network):
 
         self.decoder_output = d7_decoder
         self.autoencoder_output = d7_full
+
+        # MSE autoencoder reconstruction loss (with attention)
+        full_reconstruction_loss = tf.pow(tf.multiply(tf.subtract(self.autoencoder_input, self.autoencoder_output),
+                                                      self.autoencoder_movement_focus_input), 2)
+        mean_reconstruction_loss = tf.reduce_mean(full_reconstruction_loss)
+        self.autoencoder_loss = mean_reconstruction_loss
 
     def build_conv_max_pool_architecture(self):
         # Encoder
@@ -391,3 +393,46 @@ class DynamicsNetwork(Network):
 
         self.decoder_output = d7_decoder
         self.autoencoder_output = d7_full
+
+        # MSE autoencoder reconstruction loss (with attention)
+        full_reconstruction_loss = tf.pow(tf.multiply(tf.subtract(self.autoencoder_input, self.autoencoder_output),
+                                                      self.autoencoder_movement_focus_input), 2)
+        mean_reconstruction_loss = tf.reduce_mean(full_reconstruction_loss)
+        self.autoencoder_loss = mean_reconstruction_loss
+
+    def build_fc_architecture(self):
+        e1 = Dense(2048, activation='relu', name='e1')(flatten(self.autoencoder_input))
+        e2 = Dense(1024, activation='relu', name='e2')(e1)
+        e3 = Dense(512, activation='relu', name='e3')(e2)
+        e4 = Dense(self.latent_shape, activation='relu', name='e4')(e3)
+        self.encoder_output = e4
+
+        d1 = Dense(self.latent_shape, activation='relu', name='d1')
+        d2 = Dense(512, activation='relu', name='d2')
+        d3 = Dense(1024, activation='relu', name='d3')
+        d4 = Dense(1024, activation='relu', name='d4')
+        d5 = Dense(7056, activation='sigmoid', name='d5')
+
+        # Full autoencoder
+        d1_full = d1(self.encoder_output)
+        d2_full = d2(d1_full)
+        d3_full = d3(d2_full)
+        d4_full = d4(d3_full)
+        d5_full = d5(d4_full)
+
+        # Only decoding
+        d1_decoder = d1(self.decoder_input)
+        d2_decoder = d2(d1_decoder)
+        d3_decoder = d3(d2_decoder)
+        d4_decoder = d4(d3_decoder)
+        d5_decoder = d5(d4_decoder)
+
+        self.decoder_output = Reshape((84, 84, 1))(d5_full)
+        self.autoencoder_output = Reshape((84, 84, 1))(d5_decoder)
+
+        # MSE autoencoder reconstruction loss (with attention)
+        full_reconstruction_loss = tf.pow(
+            tf.multiply(tf.subtract(flatten(self.autoencoder_input), self.autoencoder_output),
+                        flatten(self.autoencoder_movement_focus_input)), 2)
+        mean_reconstruction_loss = tf.reduce_mean(full_reconstruction_loss)
+        self.autoencoder_loss = mean_reconstruction_loss

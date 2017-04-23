@@ -100,29 +100,12 @@ class PolicyVDNetwork(Network):
                 self.dynamics_optimizer = tf.train.AdamOptimizer().minimize(self.dynamics_loss)
 
                 # Autoencoder model ops
-                self.autoencoder_movement_focus_input_ph = tf.placeholder(tf.uint8, [None, 84, 84, 1],
-                                                                          name='focus_autoencoder_input')
-                self.autoencoder_movement_focus_input = tf.scalar_mul(2.0, tf.add(
-                    tf.ceil(tf.scalar_mul(1.0 / 255.0, tf.cast(self.autoencoder_movement_focus_input_ph, tf.float32))),
-                    1.0))
+
 
                 # MSE autoencoder reconstruction loss (no attention)
                 # self.autoencoder_loss_full = tf.pow(tf.subtract(self.autoencoder_input, self.autoencoder_output), 2)
 
-                # MSE autoencoder reconstruction loss (with attention)
-                full_reconstruction_loss = tf.pow(
-                    tf.multiply(tf.subtract(flatten(self.autoencoder_input), self.autoencoder_output),
-                                flatten(self.autoencoder_movement_focus_input)), 2)
-                mean_reconstruction_loss = tf.reduce_mean(full_reconstruction_loss)
-                self.autoencoder_loss_full = full_reconstruction_loss
-
                 # VAE loss
-                recon = K.sum(
-                    tf.multiply(K.binary_crossentropy(self.autoencoder_output, flatten(self.autoencoder_input)),
-                                flatten(self.autoencoder_movement_focus_input)), axis=1)
-                # recon = mean_reconstruction_loss  # MSE instead of cross entropy
-                kl = 0.5 * K.sum(K.exp(self.log_sigma) + K.square(self.mu) - 1. - self.log_sigma, axis=1)
-                self.autoencoder_loss = recon + kl
                 self.autoencoder_optimizer = tf.train.AdamOptimizer().minimize(self.autoencoder_loss)
 
                 # Entropy: sum_a (-p_a ln p_a)

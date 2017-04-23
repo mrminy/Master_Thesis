@@ -46,7 +46,8 @@ def get_network_and_environment_creator(args, random_seed=3):
                     'e': args.e,
                     'alpha': args.alpha,
                     'T': args.T,
-                    'latent_shape': args.latent_shape}
+                    'latent_shape': args.latent_shape,
+                    'ae_arch': args.ae_arch}
     if args.arch == 'NIPS':
         network = NIPSPolicyVNetwork(network_conf)
     elif args.arch == 'SURP':
@@ -93,6 +94,7 @@ def get_arg_parser():
 
     # Surprise-based exploration parameters
     parser.add_argument('-p', '--surprise_policy', default='', type=str, help="Action policy ('' or 'surprise')", dest="surprise_policy")
+    parser.add_argument('--ae_arch', default='CD', type=str, help="Which autoencoder architecture to be used for the deep dynamics model [CD, VCD, CMP, FC]", dest="ae_arch")
     parser.add_argument('-t', '--T', default=30, type=int, help="Number of stochastic feed forward passes per action. Default is 30.", dest="T")
     parser.add_argument('-er', '--replay_size', default=16000, type=int, help="Max experience replay size. Default is 16k", dest="replay_size")
     parser.add_argument('-ls', '--latent_shape', default=256, type=int, help="Size of the compressed latent layer. Default is 256", dest="latent_shape")
