@@ -99,14 +99,8 @@ class PolicyVDNetwork(Network):
                 self.dynamics_loss = tf.reduce_mean(self.dynamics_loss_full)
                 self.dynamics_optimizer = tf.train.AdamOptimizer().minimize(self.dynamics_loss)
 
-                # Autoencoder model ops
-
-
-                # MSE autoencoder reconstruction loss (no attention)
-                # self.autoencoder_loss_full = tf.pow(tf.subtract(self.autoencoder_input, self.autoencoder_output), 2)
-
-                # VAE loss
-                self.autoencoder_optimizer = tf.train.AdamOptimizer().minimize(self.autoencoder_loss)
+                # Autoencoder optimizer
+                self.autoencoder_optimizer = tf.train.AdamOptimizer(0.0005).minimize(self.autoencoder_loss)
 
                 # Entropy: sum_a (-p_a ln p_a)
                 self.output_layer_entropy = tf.reduce_sum(
@@ -138,17 +132,6 @@ class PolicyVDNetwork(Network):
 
                 self.value_discrepancy = tf.add(tf.subtract(self.adv_actor_ph, self.critic_target_ph),
                                                 self.output_layer_v)
-
-                # Action uncertainty with tf # TODO test this!
-                # self.T = conf['T']
-                # transition_predictions = tf.reshape(self.latent_prediction,
-                #                                     [self.emulator_counts, self.T, self.latent_shape])
-                # transition_predictions_mean, transition_predictions_var = tf.nn.moments(transition_predictions,
-                #                                                                         axes=[1])
-                # action_uncertainties = tf.reduce_mean(tf.multiply(transition_predictions_var, 2), axis=1)
-                # norm_action_uncertainties = tf.nn.softmax(action_uncertainties)
-                # mean_norm_action_uncertainties = tf.reduce_mean(norm_action_uncertainties, axis=-1)
-                # self.delta_action_uncertainties = tf.subtract(norm_action_uncertainties, mean_norm_action_uncertainties)
 
 
 class SurpriseExplorationNetwork(PolicyVDNetwork, DynamicsNetwork):

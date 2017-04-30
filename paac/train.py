@@ -92,8 +92,8 @@ def get_arg_parser():
     parser.add_argument('-rs', '--random_start', default=True, type=bool_arg, help="Whether or not to start with 30 noops for each env. Default True", dest="random_start")
     parser.add_argument('-af', '--arg_file', default=None, type=str, help="Path to the file from which to load args", dest="arg_file")
 
-    # Surprise-based exploration parameters
-    parser.add_argument('-p', '--surprise_policy', default='', type=str, help="Action policy ('' or 'surprise')", dest="surprise_policy")
+    # DDM parameters
+    # parser.add_argument('-p', '--surprise_policy', default='', type=str, help="Action policy ('' or 'surprise')", dest="surprise_policy")
     parser.add_argument('--ae_arch', default='CD', type=str, help="Which autoencoder architecture to be used for the deep dynamics model [CD, VCD, CMP, FC]", dest="ae_arch")
     parser.add_argument('-t', '--T', default=30, type=int, help="Number of stochastic feed forward passes per action. Default is 30.", dest="T")
     parser.add_argument('-er', '--replay_size', default=16000, type=int, help="Max experience replay size. Default is 16k", dest="replay_size")
@@ -103,9 +103,10 @@ def get_arg_parser():
 
 
     # Intrinsic rewards parameters
-    parser.add_argument('-iec', '--initial_exploration_const', default=0.8, type=float, help="Starting exploration constant. Default is .2", dest="initial_exploration_const")
-    parser.add_argument('-fec', '--final_exploration_const', default=0.01, type=float, help="The final exploration constant. Default is .01", dest="final_exploration_const")
-    parser.add_argument('-end_expl', '--end_exploration_discount', default=20000000, type=int, help="When to end the exploration discount. Default is 20m", dest="end_exploration_discount")
+    parser.add_argument('-iec', '--initial_exploration_const', default=0.03, type=float, help="Starting exploration constant. Default is .2", dest="initial_exploration_const")
+    parser.add_argument('-fec', '--final_exploration_const', default=0.0003, type=float, help="The final exploration constant. Default is .01", dest="final_exploration_const")
+    parser.add_argument('-end_expl', '--end_exploration_discount', default=40000000, type=int, help="When to end the exploration discount. Default is 20m", dest="end_exploration_discount")
+    parser.add_argument('--bonus_type', default='ae_loss', type=str, help="Which intrinsic reward type should be used. [surprise, ae_loss, dynamics_loss]", dest="bonus_type")
     return parser
 
 
