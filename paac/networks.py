@@ -230,9 +230,6 @@ class DynamicsNetwork(Network):
     def __init__(self, conf):
         super(DynamicsNetwork, self).__init__(conf)
 
-        self.autoencoder_movement_focus_input = tf.scalar_mul(4.0, tf.add(
-            tf.ceil(tf.subtract(self.autoencoder_input_next, self.autoencoder_input)), 1.0))
-
         with tf.device(self.device):
             with tf.name_scope(self.name):
                 # NIPS network
@@ -240,6 +237,9 @@ class DynamicsNetwork(Network):
                 _, _, conv2 = conv2d('conv2', conv1, 32, 4, 16, 2)
                 _, _, fc3 = fc('fc3', flatten(conv2), 256, activation="relu")
                 self.output = fc3
+
+                self.autoencoder_movement_focus_input = tf.scalar_mul(2.0, tf.add(
+                    tf.ceil(tf.subtract(self.autoencoder_input_next, self.autoencoder_input)), 1.0))
 
                 # Build selected AE architecture
                 if self.ae_arch == 'FC':
@@ -262,7 +262,7 @@ class DynamicsNetwork(Network):
                 pred1 = tf.nn.dropout(pred1, keep_prob=self.keep_prob, name='pred1_drop')
                 _, _, pred2 = fc('pred2', pred1, 512, activation="relu")
                 pred2 = tf.nn.dropout(pred2, keep_prob=self.keep_prob, name='pred2_drop')
-                _, _, pred3 = fc('pred3', pred2, self.latent_shape, activation="relu")
+                _, _, pred3 = fc('pred3', pred2, self.latent_shape, activation="tanh")
                 self.latent_prediction = pred3
 
                 latent_mean, latent_var = tf.nn.moments(
@@ -348,8 +348,7 @@ class DynamicsNetwork(Network):
                              border_mode='same', name='d3')
         d4 = Deconvolution2D(64, 6, 6, output_shape=(None, 40, 40, 64), subsample=(2, 2), activation='relu',
                              border_mode='same', name='d4')
-        d5 = Deconvolution2D(1, 6, 6, output_shape=(None, 84, 84, 1), subsample=(2, 2), activation='sigmoid',
-                             border_mode='valid', name='d5')
+        d5 = Deconvolution2D(1, 6, 6, output_shape=(None, 84, 84, 1), subsample=(2, 2), border_mode='valid', name='d5')
 
         # Full autoencoder
         d1_full = d1(self.encoder_output)
@@ -373,6 +372,7 @@ class DynamicsNetwork(Network):
         # MSE autoencoder reconstruction loss (with attention)
         reconstruction_loss = tf.pow(tf.multiply(tf.subtract(self.autoencoder_input, self.autoencoder_output),
                                                  self.autoencoder_movement_focus_input), 2)
+        # reconstruction_loss = tf.pow(tf.subtract(self.autoencoder_input, self.autoencoder_output), 2)
         mean_reconstruction_loss = tf.reduce_mean(reconstruction_loss)
         self.emulator_reconstruction_loss = tf.reduce_mean(
             tf.reshape(reconstruction_loss, (self.emulator_counts, 84 * 84)), axis=-1)

@@ -231,7 +231,7 @@ class PAACLearner(ActorLearner):
                                                     feed_dict=feed_dict)
 
             # Training the dynamics model
-            if counter % (1024 / self.emulator_counts) == 0 and self.global_step >= 2 * self.max_replay_size:
+            if counter % (1024 / self.emulator_counts) == 0 and self.global_step >= self.max_replay_size:
                 # if first_dynamics_train:
                 #     # Pre-train the AE such that the transition model does not learn from noise
                 #     self.train_autoencoder(num_epochs=1000)
