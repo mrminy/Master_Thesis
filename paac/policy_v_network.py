@@ -95,8 +95,9 @@ class PolicyVDNetwork(Network):
 
                 # Dynamics model ops
                 latent_diff = tf.subtract(self.dynamics_latent_target, self.dynamics_input)
-                self.dynamics_loss_full = tf.pow(tf.subtract(latent_diff, self.latent_prediction), 2)
-                self.dynamics_loss = tf.reduce_mean(self.dynamics_loss_full)
+                dynamics_se = tf.pow(tf.subtract(latent_diff, self.latent_prediction), 2)
+                self.dynamics_loss_full = tf.reduce_mean(dynamics_se, axis=1)
+                self.dynamics_loss = tf.reduce_mean(dynamics_se)
                 self.dynamics_optimizer = tf.train.AdamOptimizer().minimize(self.dynamics_loss)
 
                 # Autoencoder optimizer

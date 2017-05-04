@@ -38,11 +38,11 @@ class PAACLearner(ActorLearner):
         self.replay_memory_dynamics_model = deque(maxlen=int(self.max_replay_size / self.emulator_counts))
 
         # Average autoencoder loss and dynamics loss
-        self.autoencoder_loss_mean = 0.
-        self.autoencoder_loss_max = 0.
+        self.autoencoder_loss_mean = 1.
+        self.autoencoder_loss_max = 1.
         self.autoencoder_loss_std = 0.
-        self.dynamics_loss_mean = 0.
-        self.dynamics_loss_max = 0.
+        self.dynamics_loss_mean = 1.
+        self.dynamics_loss_max = 1.
 
         self.min_max_value = 0.1  # intrinsic rewards are clipped +- min_max_value
 
@@ -325,12 +325,11 @@ class PAACLearner(ActorLearner):
                          self.network.action_input: actions_t,
                          self.network.keep_prob: 1.}
             dynamics_loss = self.session.run(self.network.dynamics_loss_full, feed_dict=feed_dict)
-            dynamics_loss = np.divide(dynamics_loss.reshape((self.emulator_counts, self.network.latent_shape)),
-                                      self.dynamics_loss_max)
+            dynamics_loss = np.divide(dynamics_loss, self.dynamics_loss_max)
 
-            intrinsic_reward[t] = dynamics_loss * self.__get_exploration_const() * ae_loss_adjustment
+            intrinsic_reward[t] = np.multiply(dynamics_loss, ae_loss_adjustment)
 
-        intrinsic_reward = np.clip(intrinsic_reward, -self.min_max_value, self.min_max_value)
+        intrinsic_reward = np.clip(intrinsic_reward * self.__get_exploration_const(), -self.min_max_value, self.min_max_value)
         return intrinsic_reward
 
     def update_reward_bonus_surprise(self, states, actions, intrinsic_reward):
@@ -373,8 +372,8 @@ class PAACLearner(ActorLearner):
             # action_uncertainties = np.multiply(action_uncertainties, self.num_actions / 6)
 
             # Add all intrinsic rewards and discount based on time step
-            intrinsic_reward[t] = action_uncertainties * self.__get_exploration_const() * ae_loss_adjustment
-        intrinsic_reward = np.clip(intrinsic_reward, -self.min_max_value, self.min_max_value)
+            intrinsic_reward[t] = np.multiply(action_uncertainties, ae_loss_adjustment.reshape((self.emulator_counts, 1)))
+        intrinsic_reward = np.clip(intrinsic_reward * self.__get_exploration_const(), -self.min_max_value, self.min_max_value)
         return intrinsic_reward
 
     def train_dynamics_model(self, num_epochs=100):
