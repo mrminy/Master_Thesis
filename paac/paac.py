@@ -25,6 +25,8 @@ class PAACLearner(ActorLearner):
                           'header': 'Relative time|Absolute time|Global Time Step|[Advantage]|[R]|[Value]|[Value Discrepancy]|Dynamics_loss|Autoencoder loss|Mean action uncertainty|Std action uncertainty|Avg reward bonus'}]
         self.stats_logger = custom_logging.StatsLogger(logger_config, subfolder=args.debugging_folder)
 
+        self.enable_plotting = args.enable_plotting
+
         self.static_ae = args.static_ae
 
         self.initial_exploration_constant = args.initial_exploration_const
@@ -36,9 +38,11 @@ class PAACLearner(ActorLearner):
         self.replay_memory_dynamics_model = deque(maxlen=int(self.max_replay_size / self.emulator_counts))
 
         # Average autoencoder loss and dynamics loss
-        self.autoencoder_loss = 1.
+        self.autoencoder_loss_mean = 0.
+        self.autoencoder_loss_max = 0.
         self.autoencoder_loss_std = 0.
-        self.dynamics_loss = 1.
+        self.dynamics_loss_mean = 0.
+        self.dynamics_loss_max = 0.
 
         self.min_max_value = 0.1  # intrinsic rewards are clipped +- min_max_value
 
@@ -237,17 +241,19 @@ class PAACLearner(ActorLearner):
                 #     self.train_autoencoder(num_epochs=1000)
                 #     first_dynamics_train = False
 
-                autoencoder_loss_mean, autoencoder_loss_std, dynamics_loss_mean = self.train_dynamics_model()
-                self.autoencoder_loss = autoencoder_loss_mean
-                self.autoencoder_loss_std = autoencoder_loss_std
-                self.dynamics_loss = dynamics_loss_mean
+                autoencoder_loss_arr, dynamics_loss_arr = self.train_dynamics_model()
+                self.autoencoder_loss_mean = np.mean(autoencoder_loss_arr)
+                self.autoencoder_loss_std = np.std(autoencoder_loss_arr)
+                self.autoencoder_loss_max = np.max(autoencoder_loss_arr)
+                self.dynamics_loss_mean = np.mean(dynamics_loss_arr)
+                self.dynamics_loss_max = np.max(dynamics_loss_arr)
 
             counter += 1
             self.stats_logger.log('learning', self.global_step,
                                   self.stats_logger.get_stats_for_array(flat_adv_batch),
                                   self.stats_logger.get_stats_for_array(flat_y_batch), Rs_stats,
-                                  self.stats_logger.get_stats_for_array(value_discrepancy), self.dynamics_loss,
-                                  self.autoencoder_loss, 0., 0., avg_reward_bonus)
+                                  self.stats_logger.get_stats_for_array(value_discrepancy), self.dynamics_loss_mean,
+                                  self.autoencoder_loss_mean, 0., 0., avg_reward_bonus)
 
             if counter % (2048 / self.emulator_counts) == 0:
                 curr_time = time.time()
@@ -258,9 +264,9 @@ class PAACLearner(ActorLearner):
                         .format(global_steps,
                                 self.max_local_steps * self.emulator_counts / (curr_time - loop_start_time),
                                 (global_steps - global_step_start) / (curr_time - start_time),
-                                last_ten, self.dynamics_loss, self.autoencoder_loss, avg_reward_bonus))
+                                last_ten, self.dynamics_loss_mean, self.autoencoder_loss_mean, avg_reward_bonus))
 
-            if counter % (40960 / self.emulator_counts) == 0:
+            if self.enable_plotting and counter % (40960 / self.emulator_counts) == 0:
                 self.do_plotting()
 
             self.save_vars()
@@ -280,7 +286,7 @@ class PAACLearner(ActorLearner):
                          self.network.autoencoder_input_next_ph: autoencoder_states_next}
             ae_loss = self.session.run(self.network.emulator_reconstruction_loss, feed_dict=feed_dict)
 
-            ae_loss_bonus = np.divide(ae_loss, self.autoencoder_loss)
+            ae_loss_bonus = np.divide(ae_loss, self.autoencoder_loss_max)
 
             intrinsic_reward[t] = ae_loss_bonus
 
@@ -310,7 +316,7 @@ class PAACLearner(ActorLearner):
                 [self.network.encoder_output, self.network.emulator_reconstruction_loss], feed_dict=feed_dict)
 
             # Calculate AE loss bonus adjustment
-            ae_loss_adjustment = np.clip(np.divide(ae_loss, self.autoencoder_loss), .5, 2.)
+            ae_loss_adjustment = np.clip(np.divide(ae_loss, self.autoencoder_loss_mean), .5, 2.)
 
             # Calculate dynamics error
             feed_dict = {self.network.dynamics_input_prev: prev_latent_vars,
@@ -320,9 +326,8 @@ class PAACLearner(ActorLearner):
                          self.network.keep_prob: 1.}
             dynamics_loss = self.session.run(self.network.dynamics_loss_full, feed_dict=feed_dict)
             dynamics_loss = np.divide(dynamics_loss.reshape((self.emulator_counts, self.network.latent_shape)),
-                                      self.dynamics_loss)
+                                      self.dynamics_loss_max)
 
-            # intrinsic_reward[t] = np.multiply(action_uncertainties, ae_loss_adjustment) * self.__get_exploration_const()
             intrinsic_reward[t] = dynamics_loss * self.__get_exploration_const() * ae_loss_adjustment
 
         intrinsic_reward = np.clip(intrinsic_reward, -self.min_max_value, self.min_max_value)
@@ -352,7 +357,7 @@ class PAACLearner(ActorLearner):
                 [self.network.encoder_output, self.network.emulator_reconstruction_loss], feed_dict=feed_dict)
 
             # Calculate AE loss bonus adjustment
-            ae_loss_adjustment = np.clip(np.divide(ae_loss, self.autoencoder_loss), .5, 2.)
+            ae_loss_adjustment = np.clip(np.divide(ae_loss, self.autoencoder_loss_mean), .5, 2.)
 
             # Calculate MC dropout surprise
             prev_latent_repeat = np.repeat(prev_latent_vars, T, axis=0)
@@ -413,7 +418,7 @@ class PAACLearner(ActorLearner):
                                                 feed_dict=feed_dict)
             autoencoder_loss_arr.append(autoencoder_loss)
             dynamics_loss_arr.append(dynamics_loss)
-        return np.mean(autoencoder_loss_arr), np.std(autoencoder_loss_arr), np.mean(dynamics_loss_arr)
+        return autoencoder_loss_arr, dynamics_loss_arr
 
     # def train_autoencoder(self, num_epochs=1000):
     #     for i in range(num_epochs):
