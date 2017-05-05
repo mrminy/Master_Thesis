@@ -258,9 +258,9 @@ class DynamicsNetwork(Network):
                 # Prediction on latent space
                 prediction_input = tf.concat([self.dynamics_input_prev, self.dynamics_input, self.action_input], axis=1,
                                              name='prediction_input_concat')
-                _, _, pred1 = fc('pred1', prediction_input, 512, activation="relu")
+                _, _, pred1 = fc('pred1', prediction_input, 1024, activation="tanh")
                 pred1 = tf.nn.dropout(pred1, keep_prob=self.keep_prob, name='pred1_drop')
-                _, _, pred2 = fc('pred2', pred1, 512, activation="relu")
+                _, _, pred2 = fc('pred2', pred1, 1024, activation="tanh")
                 pred2 = tf.nn.dropout(pred2, keep_prob=self.keep_prob, name='pred2_drop')
                 _, _, pred3 = fc('pred3', pred2, self.latent_shape, activation="tanh")
                 self.latent_prediction = pred3

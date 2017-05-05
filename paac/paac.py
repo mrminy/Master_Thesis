@@ -236,12 +236,7 @@ class PAACLearner(ActorLearner):
 
             # Training the dynamics model
             if counter % (1024 / self.emulator_counts) == 0 and self.global_step >= self.max_replay_size:
-                # if first_dynamics_train:
-                #     # Pre-train the AE such that the transition model does not learn from noise
-                #     self.train_autoencoder(num_epochs=1000)
-                #     first_dynamics_train = False
-
-                autoencoder_loss_arr, dynamics_loss_arr = self.train_dynamics_model()
+                autoencoder_loss_arr, dynamics_loss_arr = self.train_dynamics_model(num_epochs=100)
                 self.autoencoder_loss_mean = np.mean(autoencoder_loss_arr)
                 self.autoencoder_loss_std = np.std(autoencoder_loss_arr)
                 self.autoencoder_loss_max = np.max(autoencoder_loss_arr)
