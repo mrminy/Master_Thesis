@@ -367,7 +367,7 @@ class PAACLearner(ActorLearner):
             # action_uncertainties = np.multiply(action_uncertainties, self.num_actions / 6)
 
             # Add all intrinsic rewards and discount based on time step
-            intrinsic_reward[t] = np.multiply(action_uncertainties, ae_loss_adjustment.reshape((self.emulator_counts, 1)))
+            intrinsic_reward[t] = np.multiply(action_uncertainties, ae_loss_adjustment)
         intrinsic_reward = np.clip(intrinsic_reward * self.__get_exploration_const(), -self.min_max_value, self.min_max_value)
         return intrinsic_reward
 
