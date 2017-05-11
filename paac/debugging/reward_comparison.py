@@ -2,9 +2,10 @@ import csv
 import matplotlib.pyplot as plt
 import numpy as np
 from debugging import StatsViewer
+# import seaborn as sns
 
 
-def show_plot(configs, window_size, show_legend=False, max_time_steps=None):
+def show_plot(configs, window_size, show_legend=False, max_time_steps=None, show_variance=False):
     for config in configs:
         x_idx = config['to_print'][0]
         y_idx = config['to_print'][1]
@@ -23,16 +24,16 @@ def show_plot(configs, window_size, show_legend=False, max_time_steps=None):
                 y_axes.append(float(row[y_idx]))
             x_axis = np.array(x_axis)
             y_axes = np.array(y_axes)
-            y_axes_moving_avg = []
-            y_axes_moving_avg.append(StatsViewer.moving_average(y_axes, window_size))
-            y_axes_moving_avg = np.array(y_axes_moving_avg[0])
+            y_axes_moving_avg = np.array(StatsViewer.moving_average(y_axes, window_size))
             moving_std = StatsViewer.moving_std(y_axes, window_size)
-            plt.fill_between(x_axis, np.add(y_axes_moving_avg, moving_std),
-                             np.add(y_axes_moving_avg, np.multiply(-1.0, moving_std)), facecolor=config['color'],
-                             alpha=0.2)
-            plt.plot(x_axis, y_axes_moving_avg, color=config['color'], label=config['file_name'])
+            if show_variance:
+                plt.fill_between(x_axis, np.add(y_axes_moving_avg, moving_std),
+                                 np.add(y_axes_moving_avg, np.multiply(-1.0, moving_std)), facecolor=config['color'],
+                                 alpha=0.2)
+            plt.plot(x_axis, y_axes_moving_avg, color=config['color'], label=config['file_name'], linewidth=2.)
     if show_legend:
         plt.legend()
+    plt.grid(True)
     plt.show()
 
 
@@ -50,12 +51,15 @@ if __name__ == '__main__':
     parser.add_argument('-f7', '--file7', default='', help='Where the file-logs are stored', dest="file7")
     parser.add_argument('-l', '--show_legend', default=False, type=bool, help='Show legend in plot or not',
                         dest="show_legend")
+    parser.add_argument('-v', '--show_variance', default=False, type=bool,
+                        help='Show two times standard deviation fro the plots',
+                        dest="show_variance")
     parser.add_argument('-ws', '--smoothing_window_size', default='100', type=int,
                         help='The window size to use for smoothing', dest="window_size")
     parser.add_argument('-t', '--max_time_steps', default='0', type=int,
                         help='Maximum time steps to show in the plot', dest="max_time_steps")
     args = parser.parse_args()
-    
+
     time_step_idx = 2
     plot_idx = 5
 
@@ -79,4 +83,5 @@ if __name__ == '__main__':
     if args.max_time_steps > 0:
         max_time_steps = args.max_time_steps
 
-    show_plot(configs, window_size=args.window_size, show_legend=args.show_legend, max_time_steps=max_time_steps)
+    show_plot(configs, window_size=args.window_size, show_legend=args.show_legend, max_time_steps=max_time_steps,
+              show_variance=args.show_variance)

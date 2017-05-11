@@ -3,16 +3,17 @@ import numpy as np
 from matplotlib import pyplot as plt
 import custom_logging
 from debugging import StatsViewer
+from operator import itemgetter
 
 
-def merge_data(configs, max_time_steps, window_size=200, samples=50000, show_plot=False, save_file=None, show_legend=False):
+def merge_data(configs, max_time_steps, window_size=200, show_plot=False, save_file=None,
+               show_legend=False):
     logger_config = [{'name': 'avg', 'file_name': 'avg_log_0.txt',
                       'header': 'Relative time|Absolute time|Global Time Step|empty|Average reward|Average reward moving window'}]
     if save_file is not None:
         stats_logger = custom_logging.StatsLogger(logger_config, subfolder=save_file)
 
-    x_interpolated = np.linspace(0, max_time_steps, num=samples)
-    y_points = np.zeros((len(configs), samples))
+    data_points = []
 
     for i, config in enumerate(configs):
         x_idx = config['to_print'][0]
@@ -30,34 +31,30 @@ def merge_data(configs, max_time_steps, window_size=200, samples=50000, show_plo
                     break
                 x_axis.append(time_steps)
                 y_axes.append(float(row[y_idx]))
+                data_points.append([time_steps, float(row[y_idx])])
 
             x_axis = np.array(x_axis)
             y_axes = np.array(y_axes)
             y_axes_moving_avg = StatsViewer.moving_average(y_axes, window_size)
-            moving_std = StatsViewer.moving_std(y_axes, window_size)
 
             if show_plot:
-                # plt.fill_between(x_axis, np.add(y_axes_moving_avg, moving_std),
-                #                  np.add(y_axes_moving_avg, np.multiply(-1.0, moving_std)), facecolor=config['color'],
-                #                  alpha=0.2)
                 plt.plot(x_axis, y_axes_moving_avg, color=config['color'], label=config['file_name'], linewidth=0.2)
 
-            for k in range(samples):
-                idx = (np.abs(x_axis - x_interpolated[k])).argmin()
-                y_points[i][k] = y_axes_moving_avg[idx]
-
-    y_points_avg = np.mean(y_points, axis=0)
-    y_points_avg_moving_avg = StatsViewer.moving_average(y_points_avg, window_size)
+    sorted_data_set = sorted(data_points, key=itemgetter(0))
+    x_points = [item[0] for item in sorted_data_set]
+    y_points = [item[1] for item in sorted_data_set]
+    smooth_y_points = StatsViewer.moving_average(y_points, window_size)
 
     if show_plot:
-        plt.plot(x_interpolated, y_points_avg_moving_avg, color='k', label='average', linewidth=2.0)
+        plt.plot(x_points, smooth_y_points, color='k', label='average', linewidth=2.0)
         if show_legend:
             plt.legend()
+        plt.grid(True)
         plt.show()
 
     if save_file is not None:
-        for s in range(samples):
-            stats_logger.log('avg', x_interpolated[s], 0, y_points_avg[s], y_points_avg_moving_avg[s])
+        for i in range(len(sorted_data_set)):
+            stats_logger.log('avg', x_points[i], 0, smooth_y_points[i], smooth_y_points[i])
 
 
 if __name__ == '__main__':
@@ -78,8 +75,6 @@ if __name__ == '__main__':
                         help='The window size to use for smoothing', dest="window_size")
     parser.add_argument('-t', '--max_time_steps', default='20000000', type=int,
                         help='Maximum time steps to show in the plot', dest="max_time_steps")
-    parser.add_argument('-s', '--samples', default='50000', type=int,
-                        help='Number of samples to the average data', dest="samples")
     parser.add_argument('-p', '--show_plot', default=False, type=bool, help='Show plot',
                         dest="show_plot")
     parser.add_argument('-l', '--show_legend', default=False, type=bool, help='Show legend in plot',
@@ -116,5 +111,5 @@ if __name__ == '__main__':
     if len(args.save_folder) > 0:
         save_path = args.save_folder
 
-    merge_data(configs, args.max_time_steps, samples=args.samples, window_size=args.window_size,
-               show_plot=args.show_plot, save_file=save_path, show_legend=args.show_legend)
+    merge_data(configs, args.max_time_steps, window_size=args.window_size, show_plot=args.show_plot,
+               save_file=save_path, show_legend=args.show_legend)
