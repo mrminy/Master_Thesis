@@ -47,7 +47,9 @@ def get_network_and_environment_creator(args, random_seed=3):
                     'alpha': args.alpha,
                     'T': args.T,
                     'latent_shape': args.latent_shape,
-                    'ae_arch': args.ae_arch}
+                    'ae_arch': args.ae_arch,
+                    'bonus_type': args.bonus_type,
+                    'num_heads': args.num_heads}
     if args.arch == 'NIPS':
         network = NIPSPolicyVNetwork(network_conf)
     elif args.arch == 'SURP':
@@ -69,7 +71,7 @@ def get_arg_parser():
 
     # RL parameters
     parser.add_argument('-g', default='pong', help='Name of game', dest='game')
-    parser.add_argument('-d', '--device', default='/gpu:0', type=str, help="Device to be used ('/cpu:0', /gpu:0, /gpu:1,...)", dest="device")
+    parser.add_argument('-d', '--device', default='/cpu:0', type=str, help="Device to be used ('/cpu:0', /gpu:0, /gpu:1,...)", dest="device")
     parser.add_argument('--rom_path', default='./atari_roms', help='Directory where the game roms are located (needed for ALE environment)', dest="rom_path")
     parser.add_argument('-v', '--visualize', default=False, type=bool_arg, help="0: no visualization of emulator; 1: all emulators, for all actors, are visualized; 2: only 1 emulator (for one of the actors) is visualized", dest="visualize")
 
@@ -98,7 +100,7 @@ def get_arg_parser():
     parser.add_argument('-t', '--T', default=30, type=int, help="Number of stochastic feed forward passes per action. Default is 30.", dest="T")
     parser.add_argument('-er', '--replay_size', default=16000, type=int, help="Max experience replay size. Default is 16k", dest="replay_size")
     parser.add_argument('-ls', '--latent_shape', default=256, type=int, help="Size of the compressed latent layer. Default is 256", dest="latent_shape")
-    parser.add_argument('-sae', '--static_ae', default=80000000, type=int,
+    parser.add_argument('-sae', '--static_ae', default=0, type=int,
                         help="How many time steps the autoencoder should be trained for. (setting to 0 gives continuous training)", dest="static_ae")
     parser.add_argument('--enable_plotting', default=False, type=bool_arg, help="If True, some state reconstructions and transitions predictions will be saved to file.", dest="enable_plotting")
 
@@ -107,7 +109,8 @@ def get_arg_parser():
     parser.add_argument('-iec', '--initial_exploration_const', default=0.1, type=float, help="Starting exploration constant. Default is .2", dest="initial_exploration_const")
     parser.add_argument('-fec', '--final_exploration_const', default=0.0001, type=float, help="The final exploration constant. Default is .01", dest="final_exploration_const")
     parser.add_argument('-end_expl', '--end_exploration_discount', default=40000000, type=int, help="When to end the exploration discount. Default is 20m", dest="end_exploration_discount")
-    parser.add_argument('--bonus_type', default='surprise', type=str, help="Which intrinsic reward type should be used. [surprise, ae_loss, dynamics_loss]", dest="bonus_type")
+    parser.add_argument('--bonus_type', default='bootstrap', type=str, help="Which intrinsic reward type should be used. [surprise, ae_loss, dynamics_loss]", dest="bonus_type")
+    parser.add_argument('--num_heads', default=10, type=int, help="Number of heads if bootstrap is being used in dynamics model", dest="num_heads")
     return parser
 
 

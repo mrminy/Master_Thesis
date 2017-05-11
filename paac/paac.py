@@ -46,12 +46,14 @@ class PAACLearner(ActorLearner):
 
         self.min_max_value = 0.1  # intrinsic rewards are clipped +- min_max_value
 
-        # Choose type of intrinsic reward
+        # Choose type of intrinsic reward. Default is surprise by MC dropout
         self.update_reward_bonus = self.update_reward_bonus_surprise
         if args.bonus_type == 'ae_loss':
             self.update_reward_bonus = self.update_reward_bonus_ae_loss
         elif args.bonus_type == 'dynamics_loss':
             self.update_reward_bonus = self.update_reward_bonus_dynamics_loss
+        elif args.bonus_type == 'bootstrap':
+            self.update_reward_bonus = self.update_reward_bonus_surprise_boot_and_mc
 
     @staticmethod
     def choose_next_actions(network, num_actions, states, session):
@@ -324,7 +326,8 @@ class PAACLearner(ActorLearner):
 
             intrinsic_reward[t] = np.multiply(dynamics_loss, ae_loss_adjustment)
 
-        intrinsic_reward = np.clip(intrinsic_reward * self.__get_exploration_const(), -self.min_max_value, self.min_max_value)
+        intrinsic_reward = np.clip(intrinsic_reward * self.__get_exploration_const(), -self.min_max_value,
+                                   self.min_max_value)
         return intrinsic_reward
 
     def update_reward_bonus_surprise(self, states, actions, intrinsic_reward):
@@ -368,7 +371,59 @@ class PAACLearner(ActorLearner):
 
             # Add all intrinsic rewards and discount based on time step
             intrinsic_reward[t] = np.multiply(action_uncertainties, ae_loss_adjustment)
-        intrinsic_reward = np.clip(intrinsic_reward * self.__get_exploration_const(), -self.min_max_value, self.min_max_value)
+        intrinsic_reward = np.clip(intrinsic_reward * self.__get_exploration_const(), -self.min_max_value,
+                                   self.min_max_value)
+        return intrinsic_reward
+
+    def update_reward_bonus_surprise_boot_and_mc(self, states, actions, intrinsic_reward):
+        T = self.network.T  # number of stochastic forward passes
+        heads = self.network.num_heads
+
+        for t in range(self.max_local_steps):
+            autoencoder_states_prev = states[t, :, :, :, -3].reshape(self.emulator_counts, 84, 84, 1)
+            autoencoder_states_curr = states[t, :, :, :, -2].reshape(self.emulator_counts, 84, 84, 1)
+            autoencoder_states_next = states[t, :, :, :, -1].reshape(self.emulator_counts, 84, 84, 1)
+            actions_t = actions[t, :, :]
+
+            # This is faster if GPU has enough mem
+            all_states = np.concatenate((autoencoder_states_prev, autoencoder_states_next))
+            feed_dict = {self.network.autoencoder_input_ph: all_states}
+            all_latent = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
+
+            all_latent = np.split(all_latent, 2)
+            prev_latent_vars = all_latent[0]
+            next_latent_vars = all_latent[1]
+
+            feed_dict = {self.network.autoencoder_input_ph: autoencoder_states_curr,
+                         self.network.autoencoder_input_next_ph: autoencoder_states_next}
+            curr_latent_vars, ae_loss = self.session.run(
+                [self.network.encoder_output, self.network.emulator_reconstruction_loss], feed_dict=feed_dict)
+
+            # Calculate AE loss bonus adjustment
+            ae_loss_adjustment = np.clip(np.divide(ae_loss, self.autoencoder_loss_mean), .5, 2.)
+
+            # Calculate MC dropout surprise
+            prev_latent_repeat = np.repeat(prev_latent_vars, T, axis=0)
+            curr_latent_repeat = np.repeat(curr_latent_vars, T, axis=0)
+            action_repeat = np.repeat(actions_t, T, axis=0)
+            feed_dict = {self.network.keep_prob: .9, self.network.dynamics_input_prev: prev_latent_repeat,
+                         self.network.dynamics_input: curr_latent_repeat, self.network.action_input: action_repeat}
+            variance_output = self.session.run(self.network.latent_prediction, feed_dict=feed_dict)
+            sum_action_uncertainties = np.zeros(self.emulator_counts)
+            for h in range(heads):
+                head_output = variance_output[h]
+                head_output = head_output.reshape(self.emulator_counts, T, self.network.latent_shape)
+                action_uncertainties = np.mean(np.multiply(np.std(head_output, axis=1), 2), axis=1)
+                sum_action_uncertainties += action_uncertainties
+
+            # Calculate the mean uncertainty from all heads
+            action_uncertainties = np.multiply(sum_action_uncertainties, 1/heads)
+
+            # Add all intrinsic rewards and discount based on time step
+            intrinsic_reward[t] = np.multiply(action_uncertainties, ae_loss_adjustment)
+
+        intrinsic_reward = np.clip(intrinsic_reward * self.__get_exploration_const(), -self.min_max_value,
+                                   self.min_max_value)
         return intrinsic_reward
 
     def train_dynamics_model(self, num_epochs=100):
@@ -408,8 +463,11 @@ class PAACLearner(ActorLearner):
                          self.network.dynamics_latent_target: next_latent_vars,
                          self.network.action_input: minibatch_actions,
                          self.network.keep_prob: .9}
-            _, dynamics_loss = self.session.run([self.network.dynamics_optimizer, self.network.dynamics_loss],
-                                                feed_dict=feed_dict)
+            if self.network.num_heads == 1:
+                _, dynamics_loss = self.session.run([self.network.dynamics_optimizer, self.network.dynamics_loss], feed_dict=feed_dict)
+            else:
+                random_head = random.randint(0, self.network.num_heads-1)
+                _, dynamics_loss = self.session.run([self.network.dynamics_optimizer[random_head], self.network.dynamics_loss[random_head]], feed_dict=feed_dict)
             autoencoder_loss_arr.append(autoencoder_loss)
             dynamics_loss_arr.append(dynamics_loss)
         return autoencoder_loss_arr, dynamics_loss_arr
@@ -452,12 +510,13 @@ class PAACLearner(ActorLearner):
 
         feed_dict = {self.network.dynamics_input_prev: prev_latent_vars, self.network.dynamics_input: latent_vars,
                      self.network.action_input: minibatch_actions, self.network.keep_prob: 1.}
-        predicted_vars = self.session.run(self.network.latent_prediction, feed_dict=feed_dict)
+        head = random.randint(0, self.network.num_heads -1)
+        predicted_vars = self.session.run(self.network.latent_prediction[head], feed_dict=feed_dict)
         predicted_vars = np.add(latent_vars, predicted_vars)
 
         feed_dict = {self.network.dynamics_input_prev: prev_latent_vars, self.network.dynamics_input: latent_vars,
                      self.network.action_input: minibatch_actions, self.network.keep_prob: .9}
-        predicted_vars_dropout = self.session.run(self.network.latent_prediction, feed_dict=feed_dict)
+        predicted_vars_dropout = self.session.run(self.network.latent_prediction[head], feed_dict=feed_dict)
         predicted_vars_dropout = np.add(latent_vars, predicted_vars_dropout)
 
         feed_dict = {self.network.decoder_input: predicted_vars}
@@ -477,7 +536,7 @@ class PAACLearner(ActorLearner):
         feed_dict = {self.network.dynamics_input_prev: prev_repeated_latent_var,
                      self.network.dynamics_input: repeated_latent_var, self.network.action_input: possible_actions,
                      self.network.keep_prob: 1.}
-        predicted_vars = self.session.run(self.network.latent_prediction, feed_dict=feed_dict)
+        predicted_vars = self.session.run(self.network.latent_prediction[head], feed_dict=feed_dict)
         predicted_vars = np.add(repeated_latent_var, predicted_vars)
 
         feed_dict = {self.network.decoder_input: predicted_vars}
