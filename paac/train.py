@@ -71,7 +71,7 @@ def get_arg_parser():
 
     # RL parameters
     parser.add_argument('-g', default='pong', help='Name of game', dest='game')
-    parser.add_argument('-d', '--device', default='/gpu:0', type=str, help="Device to be used ('/cpu:0', /gpu:0, /gpu:1,...)", dest="device")
+    parser.add_argument('-d', '--device', default='/cpu:0', type=str, help="Device to be used ('/cpu:0', /gpu:0, /gpu:1,...)", dest="device")
     parser.add_argument('--rom_path', default='./atari_roms', help='Directory where the game roms are located (needed for ALE environment)', dest="rom_path")
     parser.add_argument('-v', '--visualize', default=False, type=bool_arg, help="0: no visualization of emulator; 1: all emulators, for all actors, are visualized; 2: only 1 emulator (for one of the actors) is visualized", dest="visualize")
 
@@ -100,7 +100,7 @@ def get_arg_parser():
     parser.add_argument('-t', '--T', default=30, type=int, help="Number of stochastic feed forward passes per action. Default is 30.", dest="T")
     parser.add_argument('-er', '--replay_size', default=16000, type=int, help="Max experience replay size. Default is 16k", dest="replay_size")
     parser.add_argument('-ls', '--latent_shape', default=256, type=int, help="Size of the compressed latent layer. Default is 256", dest="latent_shape")
-    parser.add_argument('-sae', '--static_ae', default=80000000, type=int,
+    parser.add_argument('-sae', '--static_ae', default=0, type=int,
                         help="How many time steps the autoencoder should be trained for. (setting to 0 gives continuous training)", dest="static_ae")
     parser.add_argument('--enable_plotting', default=True, type=bool_arg, help="If True, some state reconstructions and transitions predictions will be saved to file.", dest="enable_plotting")
 

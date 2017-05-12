@@ -326,7 +326,8 @@ class PAACLearner(ActorLearner):
 
             intrinsic_reward[t] = np.multiply(dynamics_loss, ae_loss_adjustment)
 
-        intrinsic_reward = np.clip(intrinsic_reward * self.__get_exploration_const(), -self.min_max_value, self.min_max_value)
+        intrinsic_reward = np.clip(intrinsic_reward * self.__get_exploration_const(), -self.min_max_value,
+                                   self.min_max_value)
         return intrinsic_reward
 
     def update_reward_bonus_surprise(self, states, actions, intrinsic_reward):
