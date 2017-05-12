@@ -119,6 +119,10 @@ class Network(object):
         self.latent_shape = conf['latent_shape']
         self.ae_arch = conf['ae_arch']
         self.T = conf['T']
+        bonus_type = conf['bonus_type']
+        self.num_heads = 1
+        if bonus_type == 'bootstrap':
+            self.num_heads = int(conf['num_heads'])
 
         # For dynamics model
         self.autoencoder_input_ph = None
@@ -128,7 +132,6 @@ class Network(object):
         self.decoder_output = None
         self.decoder_input = None
         self.latent_prediction = None
-        self.dynamics_uncertainty = None
         self.autoencoder_loss = None
         self.emulator_reconstruction_loss = None
 
@@ -262,13 +265,15 @@ class DynamicsNetwork(Network):
                 pred1 = tf.nn.dropout(pred1, keep_prob=self.keep_prob, name='pred1_drop')
                 _, _, pred2 = fc('pred2', pred1, 1024, activation="tanh")
                 pred2 = tf.nn.dropout(pred2, keep_prob=self.keep_prob, name='pred2_drop')
-                _, _, pred3 = fc('pred3', pred2, self.latent_shape, activation="tanh")
-                self.latent_prediction = pred3
 
-                latent_mean, latent_var = tf.nn.moments(
-                    tf.reshape(self.latent_prediction, (self.emulator_counts, self.T, self.latent_shape)), axes=[1])
-                self.dynamics_uncertainty = tf.scalar_mul(self.num_actions / 6, tf.reduce_mean(
-                    tf.scalar_mul(2, tf.sqrt(latent_var)), axis=1))
+                heads = []
+                for a in range(self.num_heads):
+                    _, _, pred3 = fc('pred3_' + str(a), pred2, self.latent_shape, activation="tanh")
+                    heads.append(pred3)
+                self.latent_prediction = heads
+
+                if self.num_heads == 1:
+                    self.latent_prediction = self.latent_prediction[0]
 
     def build_variational_architecture(self):
         e1 = Convolution2D(64, 6, 6, subsample=(2, 2), activation='relu', border_mode='valid', name='e1')(

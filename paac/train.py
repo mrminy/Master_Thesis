@@ -47,7 +47,9 @@ def get_network_and_environment_creator(args, random_seed=3):
                     'alpha': args.alpha,
                     'T': args.T,
                     'latent_shape': args.latent_shape,
-                    'ae_arch': args.ae_arch}
+                    'ae_arch': args.ae_arch,
+                    'bonus_type': args.bonus_type,
+                    'num_heads': args.num_heads}
     if args.arch == 'NIPS':
         network = NIPSPolicyVNetwork(network_conf)
     elif args.arch == 'SURP':
@@ -100,14 +102,15 @@ def get_arg_parser():
     parser.add_argument('-ls', '--latent_shape', default=256, type=int, help="Size of the compressed latent layer. Default is 256", dest="latent_shape")
     parser.add_argument('-sae', '--static_ae', default=80000000, type=int,
                         help="How many time steps the autoencoder should be trained for. (setting to 0 gives continuous training)", dest="static_ae")
-    parser.add_argument('--enable_plotting', default=False, type=bool_arg, help="If True, some state reconstructions and transitions predictions will be saved to file.", dest="enable_plotting")
+    parser.add_argument('--enable_plotting', default=True, type=bool_arg, help="If True, some state reconstructions and transitions predictions will be saved to file.", dest="enable_plotting")
 
 
     # Intrinsic rewards parameters
     parser.add_argument('-iec', '--initial_exploration_const', default=0.1, type=float, help="Starting exploration constant. Default is .2", dest="initial_exploration_const")
     parser.add_argument('-fec', '--final_exploration_const', default=0.0001, type=float, help="The final exploration constant. Default is .01", dest="final_exploration_const")
     parser.add_argument('-end_expl', '--end_exploration_discount', default=40000000, type=int, help="When to end the exploration discount. Default is 20m", dest="end_exploration_discount")
-    parser.add_argument('--bonus_type', default='surprise', type=str, help="Which intrinsic reward type should be used. [surprise, ae_loss, dynamics_loss]", dest="bonus_type")
+    parser.add_argument('--bonus_type', default='bootstrap', type=str, help="Which intrinsic reward type should be used. [surprise, ae_loss, dynamics_loss]", dest="bonus_type")
+    parser.add_argument('--num_heads', default=10, type=int, help="Number of heads if bootstrap is being used in dynamics model", dest="num_heads")
     return parser
 
 
