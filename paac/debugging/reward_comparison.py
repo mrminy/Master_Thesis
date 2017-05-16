@@ -5,8 +5,8 @@ from debugging import StatsViewer
 # import seaborn as sns
 
 
-def show_plot(configs, window_size, show_legend=False, max_time_steps=None, show_variance=False):
-    for config in configs:
+def show_plot(configs, window_size, legends=list(), max_time_steps=None, show_variance=False):
+    for i, config in enumerate(configs):
         x_idx = config['to_print'][0]
         y_idx = config['to_print'][1]
 
@@ -30,8 +30,12 @@ def show_plot(configs, window_size, show_legend=False, max_time_steps=None, show
                 plt.fill_between(x_axis, np.add(y_axes_moving_avg, moving_std),
                                  np.add(y_axes_moving_avg, np.multiply(-1.0, moving_std)), facecolor=config['color'],
                                  alpha=0.2)
-            plt.plot(x_axis, y_axes_moving_avg, color=config['color'], label=config['file_name'], linewidth=2.)
-    if show_legend:
+            if legends is None or len(legends) == 0 or len(legends) <= i:
+                label = config['file_name']
+            else:
+                label = legends[i]
+            plt.plot(x_axis, y_axes_moving_avg, color=config['color'], label=label, linewidth=2.)
+    if legends:
         plt.legend()
     plt.grid(True)
     plt.show()
@@ -49,11 +53,9 @@ if __name__ == '__main__':
     parser.add_argument('-f5', '--file5', default='', help='Where the file-logs are stored', dest="file5")
     parser.add_argument('-f6', '--file6', default='', help='Where the file-logs are stored', dest="file6")
     parser.add_argument('-f7', '--file7', default='', help='Where the file-logs are stored', dest="file7")
-    parser.add_argument('-l', '--show_legend', default=False, type=bool, help='Show legend in plot or not',
-                        dest="show_legend")
+    parser.add_argument('-l', '--labels', type=str, nargs='*', help='List of labels.', dest="labels")
     parser.add_argument('-v', '--show_variance', default=False, type=bool,
-                        help='Show two times standard deviation fro the plots',
-                        dest="show_variance")
+                        help='Show two times standard deviation fro the plots', dest="show_variance")
     parser.add_argument('-ws', '--smoothing_window_size', default='100', type=int,
                         help='The window size to use for smoothing', dest="window_size")
     parser.add_argument('-t', '--max_time_steps', default='0', type=int,
@@ -83,5 +85,5 @@ if __name__ == '__main__':
     if args.max_time_steps > 0:
         max_time_steps = args.max_time_steps
 
-    show_plot(configs, window_size=args.window_size, show_legend=args.show_legend, max_time_steps=max_time_steps,
+    show_plot(configs, window_size=args.window_size, legends=args.labels, max_time_steps=max_time_steps,
               show_variance=args.show_variance)
