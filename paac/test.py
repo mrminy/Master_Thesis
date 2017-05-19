@@ -59,7 +59,7 @@ if __name__ == '__main__':
                         help="Whether or not to use 35 random steps", dest="random_eval")
     parser.add_argument('-s', '--show', default=False, type=bool_arg, help="Whether or not to show the run",
                         dest="show")
-    parser.add_argument('-ep', '--embedding_plot', default=True, type=bool_arg,
+    parser.add_argument('-ep', '--embedding_plot', default=False, type=bool_arg,
                         help="Whether or not to show the TSNE embedding with images",
                         dest="embedding_plot")
     parser.add_argument('-gf', '--gif_folder', default=None, type=str, help="The folder to save the gifs",
@@ -95,7 +95,10 @@ if __name__ == '__main__':
     if args.gif_folder:
         environment.on_new_frame = get_save_frame(args.gif_folder, 'gif')
 
-    with tf.Session() as sess:
+    config = config = tf.ConfigProto()
+    if 'gpu' in args.device:
+        config.gpu_options.allow_growth = True
+    with tf.Session(config=config) as sess:
         network.init(df, sess)
 
         for i in range(args.test_count):
