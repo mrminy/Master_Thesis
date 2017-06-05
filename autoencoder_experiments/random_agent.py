@@ -1,53 +1,26 @@
+"""
+Test script for experiments with the deep dynamics model. Contains a random agent for playing Atari games from OpenAI.
+Together with the random agent, it trains a deep dynamics model dynamically while the random agents plays.
+"""
+
 import logging
 import pickle
-import random
 import sys
 import time
-from scipy import ndimage, resize
 
-from matplotlib import pyplot as plt
-import matplotlib.animation as animation
-import cv2
 import gym
 import numpy as np
-from scipy.misc import imresize
-from skimage.color import rgb2gray
+from matplotlib import pyplot as plt
+from scipy import ndimage
 
 from autoencoder_experiments.keras_autoencoders import build_deep_predictor, build_conv_combo_autoencoder, \
     train_autoencoder, encode_to_samples, train_predictor, predict_autoencoder, plot_images
 
 
-def preprocess(observation, crop_top=True, grey_scale=True, flatten=False):
+def preprocess(observation, flatten=False):
     """
     Pre-process an observation (down scale to (84,84) and make grey scale)
     """
-    # Nr 1: Slow, but ok results
-    # if grey_scale:
-    #     observation = cv2.cvtColor(cv2.resize(observation, (84, 110)), cv2.COLOR_BGR2GRAY)
-    #     if crop_top:
-    #         observation = observation[:84, :]
-    #     else:
-    #         observation = observation[26:110, :]
-    #     observation = np.reshape(observation, (84, 84, 1))
-    # else:
-    #     observation = cv2.resize(observation, (84, 110))
-    #     if crop_top:
-    #         observation = observation[:84, :]
-    #     else:
-    #         observation = observation[26:110, :]
-    #     observation = np.reshape(observation, (84, 84, 3))
-    # observation = np.divide(observation, 255.0)
-    # if flatten:
-    #     observation = observation.flatten()
-    # return observation
-
-    # Nr 2: Works very bad on MsPacMan
-    # observation = cv2.cvtColor(cv2.resize(observation, (84, 110)), cv2.COLOR_BGR2GRAY)
-    # observation = observation[26:110, :]
-    # ret, observation = cv2.threshold(observation, 1, 255, cv2.THRESH_BINARY)
-    # return np.reshape(observation, (84, 84, 1))
-
-    # Nr 3: Works ok for most environments and is pretty fast
     screen = np.dot(observation, np.array([.299, .587, .114])).astype(np.uint8)
     screen = ndimage.zoom(screen, (0.4, 0.525))
     if not flatten:
@@ -56,7 +29,9 @@ def preprocess(observation, crop_top=True, grey_scale=True, flatten=False):
 
 
 class RandomAgent(object):
-    """The world's simplest agent!"""
+    """
+    A random agent for Atari from OpenAI
+    """
 
     def __init__(self, action_space):
         self.action_space = action_space
@@ -75,13 +50,10 @@ if __name__ == '__main__':
 
     logger.setLevel(logging.INFO)
 
-    # env = gym.make('MontezumaRevenge-v0')
     env = gym.make('Pong-v0')
-    # env = gym.make('MsPacman-v0')
-    crop_top = True
+    # env = gym.make('MontezumaRevenge-v0')
 
     outdir = '/tmp/random-agent-results'
-    # env.monitor.start(outdir, force=True)
     env.seed(0)
     agent = RandomAgent(env.action_space)
 
@@ -99,10 +71,10 @@ if __name__ == '__main__':
 
     # Special experience replay (gathered manually)
     room1_ob_pre = None
-    my_er = pickle.load(open("my_er.pickle", "rb"))
+    my_er = pickle.load(open("er.pickle", "rb"))
     another_room = my_er[-1]
 
-    z_shape = 512
+    z_shape = 256
     autoencoder, encoder, decoder = build_conv_combo_autoencoder()
     predictor = build_deep_predictor(z_shape, env.action_space.n)
 
@@ -120,21 +92,10 @@ if __name__ == '__main__':
     action_uncertainties = np.zeros(env.action_space.n)
     x_uncertainties = np.arange(env.action_space.n)
 
-    if render_at_all:
-        plt.ion()
-        graph = plt.plot(x_uncertainties, action_uncertainties)[0]
-        graph2 = plt.fill(x_uncertainties, action_uncertainties)[0]
-        plt.ylim([0.0, 1.])
-
     start_time = time.time()
 
     for i in range(nb_episodes):
         print("Starting episode", (i + 1))
-        if (i + 1) % update_every_nb_episode == 0 and render_at_all:
-            env.render()
-            render = True
-        else:
-            render = False
         ob = env.reset()
 
         if (i + 1) % update_every_nb_episode == 0:
@@ -155,13 +116,6 @@ if __name__ == '__main__':
             if timestep_counter % frame_skip == 0:
                 action = agent.act(ob, reward, done)
 
-            if render:
-                env.render()
-                action_uncertainties = np.random.random_integers(0, 5, len(action_uncertainties)) / 5.0
-                graph.set_ydata(action_uncertainties)
-                plt.draw()
-                plt.pause(0.01)
-
             ob, reward, done, _ = env.step(action)
 
             if reward != 0.0:
@@ -171,7 +125,7 @@ if __name__ == '__main__':
             action_one_hot[action] = 1
             action_history.append(action_one_hot)
 
-            ob_pre = preprocess(ob, crop_top=crop_top, grey_scale=True, flatten=False)
+            ob_pre = preprocess(ob, flatten=False)
             er.append(ob_pre)
 
             timestep_counter += 1
@@ -201,7 +155,6 @@ if __name__ == '__main__':
     images_org = np.concatenate((x_input, images_org))
     plot_images(images_org, x_input_decoded, nb_examples=10)
 
-    # pickle.dump(transition_loss_history, open('transition_loss_history.pickle', 'wb'))
     plt.plot(transition_loss_history)
     plt.show()
 

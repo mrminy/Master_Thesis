@@ -1,3 +1,25 @@
+"""
+Copyright [2017] [Alfredo Clemente]
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--------------------------------------------------------------
+Motification
+- Converted PAAC to MB-PAAC (model-based). This dynamically trains the deep dynamics model with the policy- and value-network.
+- Added functions for extracting the different kinds of intrinsic reward bonuses from the deep dynamics model.
+- Added functionality for plotting different reconstructions and predictions of the deep dynamics model.
+"""
+
 import random
 import time
 from collections import deque
@@ -48,11 +70,11 @@ class PAACLearner(ActorLearner):
 
         # Choose type of intrinsic reward. Default is surprise by MC dropout
         self.update_reward_bonus = self.update_reward_bonus_surprise
-        if args.bonus_type == 'ae_loss':
+        if args.bonus_type == 'AL':
             self.update_reward_bonus = self.update_reward_bonus_ae_loss
-        elif args.bonus_type == 'dynamics_loss':
+        elif args.bonus_type == 'DL':
             self.update_reward_bonus = self.update_reward_bonus_dynamics_loss
-        elif args.bonus_type == 'bootstrap':
+        elif args.bonus_type == 'BDU':
             self.update_reward_bonus = self.update_reward_bonus_surprise_boot_and_mc
 
     @staticmethod
@@ -76,8 +98,7 @@ class PAACLearner(ActorLearner):
     @staticmethod
     def __boltzmann(probs):
         """
-        Sample an action from an action probability distribution output by
-        the policy network.
+        Sample an action from an action probability distribution output by the policy network.
         """
         # Subtract a tiny value from probabilities in order to avoid
         # "ValueError: sum(pvals[:-1]) > 1.0" in numpy.multinomial
@@ -131,8 +152,6 @@ class PAACLearner(ActorLearner):
 
         actions_sum = np.zeros((self.emulator_counts, self.num_actions))
 
-        first_dynamics_train = True
-
         for r in runners:
             r.start()
 
@@ -155,8 +174,6 @@ class PAACLearner(ActorLearner):
 
             loop_start_time = time.time()
 
-            # mean_action_uncertainty = 0.
-            # std_action_uncertainty = 0.
             max_local_steps = self.max_local_steps
             for t in range(max_local_steps):
                 next_actions, readouts_v_t, readouts_pi_t = self.__choose_next_actions(shared_states)
@@ -168,7 +185,6 @@ class PAACLearner(ActorLearner):
                 actions[t] = next_actions
                 values[t] = readouts_v_t
                 states[t] = shared_states
-                # latent_vars[t] = latent_var
 
                 # Start updating all environments with next_actions
                 for queue in queues:
@@ -204,7 +220,7 @@ class PAACLearner(ActorLearner):
             avg_reward_bonus = np.mean(intrinsic_bonus)
 
             for t in reversed(range(max_local_steps)):
-                n_Rs = rewards[t] + intrinsic_bonus[t] + self.gamma * n_Rs * episodes_over_masks[t]
+                n_Rs = intrinsic_bonus[t] + self.gamma * n_Rs * episodes_over_masks[t]
                 y_batch[t] = np.copy(n_Rs)
                 adv_batch[t] = n_Rs - values[t]
 
@@ -264,7 +280,7 @@ class PAACLearner(ActorLearner):
                                 last_ten, self.dynamics_loss_mean, self.autoencoder_loss_mean, avg_reward_bonus))
 
             if self.enable_plotting and counter % (40960 / self.emulator_counts) == 0:
-                self.do_plotting()
+                self.plot_dynamics_model()
 
             self.save_vars()
 
@@ -272,7 +288,8 @@ class PAACLearner(ActorLearner):
             queue.put(None)
         self.save_vars(True)
 
-        self.do_plotting()
+        if self.enable_plotting:
+            self.plot_dynamics_model()
 
     def update_reward_bonus_ae_loss(self, states, actions, intrinsic_reward):
         for t in range(self.max_local_steps):
@@ -298,7 +315,6 @@ class PAACLearner(ActorLearner):
             autoencoder_states_next = states[t, :, :, :, -1].reshape(self.emulator_counts, 84, 84, 1)
             actions_t = actions[t, :, :]
 
-            # This is faster if GPU has enough mem
             all_states = np.concatenate((autoencoder_states_prev, autoencoder_states_next))
             feed_dict = {self.network.autoencoder_input_ph: all_states}
             all_latent = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
@@ -321,7 +337,7 @@ class PAACLearner(ActorLearner):
                          self.network.dynamics_latent_target: next_latent_vars,
                          self.network.action_input: actions_t,
                          self.network.keep_prob: 1.}
-            dynamics_loss = self.session.run(self.network.dynamics_loss_full, feed_dict=feed_dict)
+            dynamics_loss = self.session.run(self.network.dynamics_loss, feed_dict=feed_dict)
             dynamics_loss = np.divide(dynamics_loss, self.dynamics_loss_max)
 
             intrinsic_reward[t] = np.multiply(dynamics_loss, ae_loss_adjustment)
@@ -346,7 +362,6 @@ class PAACLearner(ActorLearner):
 
             all_latent = np.split(all_latent, 2)
             prev_latent_vars = all_latent[0]
-            next_latent_vars = all_latent[1]
 
             feed_dict = {self.network.autoencoder_input_ph: autoencoder_states_curr,
                          self.network.autoencoder_input_next_ph: autoencoder_states_next}
@@ -366,9 +381,6 @@ class PAACLearner(ActorLearner):
             variance_output = variance_output.reshape(self.emulator_counts, T, self.network.latent_shape)
             action_uncertainties = np.mean(np.multiply(np.std(variance_output, axis=1), 2), axis=1)
 
-            # To keep a decent value for different kinds of numbers of actions
-            # action_uncertainties = np.multiply(action_uncertainties, self.num_actions / 6)
-
             # Add all intrinsic rewards and discount based on time step
             intrinsic_reward[t] = np.multiply(action_uncertainties, ae_loss_adjustment)
         intrinsic_reward = np.clip(intrinsic_reward * self.__get_exploration_const(), -self.min_max_value,
@@ -385,14 +397,12 @@ class PAACLearner(ActorLearner):
             autoencoder_states_next = states[t, :, :, :, -1].reshape(self.emulator_counts, 84, 84, 1)
             actions_t = actions[t, :, :]
 
-            # This is faster if GPU has enough mem
             all_states = np.concatenate((autoencoder_states_prev, autoencoder_states_next))
             feed_dict = {self.network.autoencoder_input_ph: all_states}
             all_latent = self.session.run(self.network.encoder_output, feed_dict=feed_dict)
 
             all_latent = np.split(all_latent, 2)
             prev_latent_vars = all_latent[0]
-            next_latent_vars = all_latent[1]
 
             feed_dict = {self.network.autoencoder_input_ph: autoencoder_states_curr,
                          self.network.autoencoder_input_next_ph: autoencoder_states_next}
@@ -402,7 +412,7 @@ class PAACLearner(ActorLearner):
             # Calculate AE loss bonus adjustment
             ae_loss_adjustment = np.clip(np.divide(ae_loss, self.autoencoder_loss_mean), .5, 2.)
 
-            # Calculate MC dropout surprise
+            # Calculate MC dropout surprise for each head
             prev_latent_repeat = np.repeat(prev_latent_vars, T, axis=0)
             curr_latent_repeat = np.repeat(curr_latent_vars, T, axis=0)
             action_repeat = np.repeat(actions_t, T, axis=0)
@@ -417,7 +427,7 @@ class PAACLearner(ActorLearner):
                 sum_action_uncertainties += action_uncertainties
 
             # Calculate the mean uncertainty from all heads
-            action_uncertainties = np.multiply(sum_action_uncertainties, 1/heads)
+            action_uncertainties = np.multiply(sum_action_uncertainties, 1 / heads)
 
             # Add all intrinsic rewards and discount based on time step
             intrinsic_reward[t] = np.multiply(action_uncertainties, ae_loss_adjustment)
@@ -464,31 +474,19 @@ class PAACLearner(ActorLearner):
                          self.network.action_input: minibatch_actions,
                          self.network.keep_prob: .9}
             if self.network.num_heads == 1:
-                _, dynamics_loss = self.session.run([self.network.dynamics_optimizer, self.network.dynamics_loss], feed_dict=feed_dict)
+                _, dynamics_loss = self.session.run([self.network.dynamics_optimizer, self.network.dynamics_loss],
+                                                    feed_dict=feed_dict)
             else:
-                random_head = random.randint(0, self.network.num_heads-1)
-                _, dynamics_loss = self.session.run([self.network.dynamics_optimizer[random_head], self.network.dynamics_loss[random_head]], feed_dict=feed_dict)
+                random_head = random.randint(0, self.network.num_heads - 1)
+                _, dynamics_loss = self.session.run(
+                    [self.network.dynamics_optimizer[random_head], self.network.dynamics_loss[random_head]],
+                    feed_dict=feed_dict)
             autoencoder_loss_arr.append(autoencoder_loss)
             dynamics_loss_arr.append(dynamics_loss)
+
         return autoencoder_loss_arr, dynamics_loss_arr
 
-    # def train_autoencoder(self, num_epochs=1000):
-    #     for i in range(num_epochs):
-    #         sample = random.sample(self.replay_memory_dynamics_model, 1)[0]
-    #         idx_batch = np.random.randint(len(sample[0]), size=32)  # Find random batch
-    #         minibatch_curr_frames = sample[1][idx_batch]
-    #         minibatch_next_frames = sample[2][idx_batch]
-    #         feed_dict = {
-    #             self.network.autoencoder_input_ph: minibatch_curr_frames,
-    #             self.network.autoencoder_input_next_ph: minibatch_next_frames}
-    #
-    #         # Train AE
-    #         _, autoencoder_loss, latent_vars = self.session.run(
-    #             [self.network.autoencoder_optimizer, self.network.autoencoder_loss, self.network.encoder_output],
-    #             feed_dict=feed_dict)
-
-    def do_plotting(self, save_imgs=True):
-        # Plot autoencoder
+    def plot_dynamics_model(self, save_imgs=True):
         n_imgs = 4
         sample = random.sample(self.replay_memory_dynamics_model, 1)[0]
         idx_batch = np.arange(n_imgs)
@@ -500,17 +498,17 @@ class PAACLearner(ActorLearner):
         feed_dict = {self.network.autoencoder_input_ph: minibatch_curr_frames}
         autoencoder_predict, latent_vars = self.session.run(
             [self.network.autoencoder_output, self.network.encoder_output], feed_dict=feed_dict)
-        plot_autoencoder_examples([minibatch_curr_frames, autoencoder_predict], nb_examples=n_imgs,
-                                  show_plot=not save_imgs,
-                                  save_fig=save_imgs,
-                                  save_path=self.debugging_folder + '/autoencoder_imgs/' + str(self.global_step))
+        plot_reconstruction_examples([minibatch_curr_frames, autoencoder_predict], nb_examples=n_imgs,
+                                     show_plot=not save_imgs,
+                                     save_fig=save_imgs,
+                                     save_path=self.debugging_folder + '/autoencoder_imgs/' + str(self.global_step))
 
         prev_latent_vars = self.session.run(self.network.encoder_output,
                                             feed_dict={self.network.autoencoder_input_ph: minibatch_prev_frames})
 
         feed_dict = {self.network.dynamics_input_prev: prev_latent_vars, self.network.dynamics_input: latent_vars,
                      self.network.action_input: minibatch_actions, self.network.keep_prob: 1.}
-        head = random.randint(0, self.network.num_heads -1)
+        head = random.randint(0, self.network.num_heads - 1)
         predicted_vars = self.session.run(self.network.latent_prediction[head], feed_dict=feed_dict)
         predicted_vars = np.add(latent_vars, predicted_vars)
 
@@ -525,7 +523,7 @@ class PAACLearner(ActorLearner):
         feed_dict = {self.network.decoder_input: predicted_vars_dropout}
         predicted_images_dropout = self.session.run(self.network.decoder_output, feed_dict=feed_dict)
 
-        plot_autoencoder_examples(
+        plot_reconstruction_examples(
             [minibatch_curr_frames, minibatch_next_frames, predicted_images, predicted_images_dropout],
             nb_examples=n_imgs, show_plot=not save_imgs, save_fig=save_imgs,
             save_path=self.debugging_folder + '/dynamics_imgs/' + str(self.global_step))
@@ -542,16 +540,15 @@ class PAACLearner(ActorLearner):
         feed_dict = {self.network.decoder_input: predicted_vars}
         predicted_images = self.session.run(self.network.decoder_output, feed_dict=feed_dict)
         org_img_repeat = np.repeat(minibatch_curr_frames[0], self.num_actions, axis=2).transpose(2, 0, 1)
-        plot_autoencoder_examples([org_img_repeat, predicted_images], nb_examples=self.num_actions,
-                                  show_plot=not save_imgs, save_fig=save_imgs,
-                                  save_path=self.debugging_folder + '/dynamics_imgs/' + str(
+        plot_reconstruction_examples([org_img_repeat, predicted_images], nb_examples=self.num_actions,
+                                     show_plot=not save_imgs, save_fig=save_imgs,
+                                     save_path=self.debugging_folder + '/dynamics_imgs/' + str(
                                       self.global_step) + '_action_variance')
 
 
-def plot_autoencoder_examples(img_array, nb_examples=10, img_width=84, img_height=84, show_plot=True, save_fig=False,
-                              save_path=''):
+def plot_reconstruction_examples(img_array, nb_examples=10, img_width=84, img_height=84, show_plot=True, save_fig=False,
+                                 save_path=''):
     n = nb_examples
-
     rows = len(img_array)
 
     for i in range(rows):

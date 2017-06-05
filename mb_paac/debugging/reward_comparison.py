@@ -1,8 +1,11 @@
+"""
+Helper script for comparing different runs.
+"""
+
 import csv
 import matplotlib.pyplot as plt
 import numpy as np
 from debugging import StatsViewer
-# import seaborn as sns
 
 
 def show_plot(configs, window_size, legends=list(), max_time_steps=None, show_variance=False):

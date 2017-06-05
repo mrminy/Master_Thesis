@@ -1,10 +1,30 @@
+"""
+Copyright [2017] [Alfredo Clemente]
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--------------------------------------------------------------
+Motification
+Added arguments for the dynamics model and the intrinsic reward bonuses.
+"""
+
 import argparse
 import logging
 import sys
 
 import environment_creator
 from paac import PAACLearner
-from policy_v_network import NaturePolicyVNetwork, NIPSPolicyVNetwork, SurpriseExplorationNetwork
+from policy_v_network import NaturePolicyVNetwork, NIPSPolicyVNetwork, ModelBasedPolicyVNetwork
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 
@@ -53,7 +73,7 @@ def get_network_and_environment_creator(args, random_seed=3):
     if args.arch == 'NIPS':
         network = NIPSPolicyVNetwork(network_conf)
     elif args.arch == 'SURP':
-        network = SurpriseExplorationNetwork(network_conf)
+        network = ModelBasedPolicyVNetwork(network_conf)
     else:
         network = NaturePolicyVNetwork(network_conf)
     return network, env_creator
@@ -61,13 +81,6 @@ def get_network_and_environment_creator(args, random_seed=3):
 
 def get_arg_parser():
     parser = argparse.ArgumentParser()
-    #pong
-    #breakout
-    #qbert
-    #freeway
-    #frostbite
-    #boxing
-    #montezuma_revenge
 
     # RL parameters
     parser.add_argument('-g', default='pong', help='Name of game', dest='game')
@@ -95,21 +108,19 @@ def get_arg_parser():
     parser.add_argument('-af', '--arg_file', default=None, type=str, help="Path to the file from which to load args", dest="arg_file")
 
     # DDM parameters
-    # parser.add_argument('-p', '--surprise_policy', default='', type=str, help="Action policy ('' or 'surprise')", dest="surprise_policy")
     parser.add_argument('--ae_arch', default='CD', type=str, help="Which autoencoder architecture to be used for the deep dynamics model [CD, VCD, CMP, FC]", dest="ae_arch")
-    parser.add_argument('-t', '--T', default=30, type=int, help="Number of stochastic feed forward passes per action. Default is 30.", dest="T")
+    parser.add_argument('-t', '--T', default=30, type=int, help="Number of stochastic feed forward passes per action for MC dropout.", dest="T")
     parser.add_argument('-er', '--replay_size', default=16000, type=int, help="Max experience replay size. Default is 16k", dest="replay_size")
     parser.add_argument('-ls', '--latent_shape', default=256, type=int, help="Size of the compressed latent layer. Default is 256", dest="latent_shape")
     parser.add_argument('-sae', '--static_ae', default=0, type=int,
                         help="How many time steps the autoencoder should be trained for. (setting to 0 gives continuous training)", dest="static_ae")
-    parser.add_argument('--enable_plotting', default=True, type=bool_arg, help="If True, some state reconstructions and transitions predictions will be saved to file.", dest="enable_plotting")
-
+    parser.add_argument('--enable_plotting', default=False, type=bool_arg, help="If True, some state reconstructions and transitions predictions will be saved to file.", dest="enable_plotting")
 
     # Intrinsic rewards parameters
     parser.add_argument('-iec', '--initial_exploration_const', default=0.1, type=float, help="Starting exploration constant. Default is .2", dest="initial_exploration_const")
     parser.add_argument('-fec', '--final_exploration_const', default=0.0001, type=float, help="The final exploration constant. Default is .01", dest="final_exploration_const")
-    parser.add_argument('-end_expl', '--end_exploration_discount', default=40000000, type=int, help="When to end the exploration discount. Default is 20m", dest="end_exploration_discount")
-    parser.add_argument('--bonus_type', default='bootstrap', type=str, help="Which intrinsic reward type should be used. [surprise, ae_loss, dynamics_loss]", dest="bonus_type")
+    parser.add_argument('-end_expl', '--end_exploration_discount', default=80000000, type=int, help="When to end the exploration discount. Default is 20m", dest="end_exploration_discount")
+    parser.add_argument('--bonus_type', default='DU', type=str, help="Which intrinsic reward bonus type should be used. [AL (autoencoder loss), DL (dynamics loss), DU (MC dropout), BDU (bootstrap + MC dropout)]", dest="bonus_type")
     parser.add_argument('--num_heads', default=10, type=int, help="Number of heads if bootstrap is being used in dynamics model", dest="num_heads")
     return parser
 

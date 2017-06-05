@@ -1,3 +1,23 @@
+"""
+Copyright [2017] [Alfredo Clemente]
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--------------------------------------------------------------
+Motification
+Added modifications for the MB-PAAC algorithm.
+"""
+
 from networks import *
 import tensorflow as tf
 
@@ -6,7 +26,7 @@ class PolicyVNetwork(Network):
     def __init__(self, conf):
         """ Set up remaining layers, objective and loss functions, gradient
         compute and apply ops, network parameter synchronization ops, and
-        summary ops. """
+        summary ops. This is for the model-free PAAC. """
 
         super(PolicyVNetwork, self).__init__(conf)
 
@@ -43,15 +63,13 @@ class PolicyVNetwork(Network):
                 # executed action. This will make the non-regularised objective
                 # term for non-selected actions to be zero.
                 log_output_selected_action = tf.reduce_sum(
-                    tf.multiply(self.log_output_layer_pi, self.selected_action_ph),
-                    reduction_indices=1)
-                self.actor_objective_advantage_term = tf.multiply(
-                    log_output_selected_action, self.adv_actor_ph)
-                self.actor_objective_entropy_term = tf.multiply(
-                    self.entropy_regularisation_strength, self.output_layer_entropy)
-                self.actor_objective = tf.reduce_sum(tf.multiply(
-                    tf.constant(-1.0), tf.add(self.actor_objective_advantage_term,
-                                              self.actor_objective_entropy_term)))
+                    tf.multiply(self.log_output_layer_pi, self.selected_action_ph), reduction_indices=1)
+                self.actor_objective_advantage_term = tf.multiply(log_output_selected_action, self.adv_actor_ph)
+                self.actor_objective_entropy_term = tf.multiply(self.entropy_regularisation_strength,
+                                                                self.output_layer_entropy)
+                self.actor_objective = tf.reduce_sum(tf.multiply(tf.constant(-1.0),
+                                                                 tf.add(self.actor_objective_advantage_term,
+                                                                        self.actor_objective_entropy_term)))
 
                 self.critic_loss = tf.scalar_mul(0.5, tf.nn.l2_loss(self.adv_critic))
 
@@ -65,13 +83,13 @@ class PolicyVNetwork(Network):
                 self.dynamics_optimizer = None
 
 
-class PolicyVDNetwork(Network):
+class DynamicsModelPolicyValueNetwork(Network):
     def __init__(self, conf):
         """ Set up remaining layers, objective and loss functions, gradient
         compute and apply ops, network parameter synchronization ops, and
-        summary ops. """
+        summary ops. This is for the MB-PAAC."""
 
-        super(PolicyVDNetwork, self).__init__(conf)
+        super(DynamicsModelPolicyValueNetwork, self).__init__(conf)
 
         self.entropy_regularisation_strength = conf['entropy_regularisation_strength']
 
@@ -92,22 +110,6 @@ class PolicyVDNetwork(Network):
                 # Avoiding log(0) by adding a very small quantity (1e-30) to output.
                 self.log_output_layer_pi = tf.log(tf.add(self.output_layer_pi, tf.constant(1e-30)),
                                                   name=layer_name + '_log_policy')
-
-                # Dynamics model ops
-                latent_diff = tf.subtract(self.dynamics_latent_target, self.dynamics_input)
-                self.dynamics_loss = []
-                self.dynamics_optimizer = []
-                for a in range(self.num_heads):
-                    d_loss = tf.reduce_mean(tf.pow(tf.subtract(latent_diff, self.latent_prediction), 2))
-                    self.dynamics_loss.append(d_loss)
-                    self.dynamics_optimizer.append(tf.train.AdamOptimizer(0.0005).minimize(d_loss))
-
-                if self.num_heads == 1:
-                    self.dynamics_loss = self.dynamics_loss[0]
-                    self.dynamics_optimizer = self.dynamics_optimizer[0]
-
-                # Autoencoder optimizer
-                self.autoencoder_optimizer = tf.train.AdamOptimizer(0.0005).minimize(self.autoencoder_loss)
 
                 # Entropy: sum_a (-p_a ln p_a)
                 self.output_layer_entropy = tf.reduce_sum(
@@ -140,8 +142,24 @@ class PolicyVDNetwork(Network):
                 self.value_discrepancy = tf.add(tf.subtract(self.adv_actor_ph, self.critic_target_ph),
                                                 self.output_layer_v)
 
+                # Dynamics model ops
+                latent_diff = tf.subtract(self.dynamics_latent_target, self.dynamics_input)
+                self.dynamics_loss = []
+                self.dynamics_optimizer = []
+                for a in range(self.num_heads):
+                    d_loss = tf.reduce_mean(tf.pow(tf.subtract(latent_diff, self.latent_prediction), 2))
+                    self.dynamics_loss.append(d_loss)
+                    self.dynamics_optimizer.append(tf.train.AdamOptimizer(0.0005).minimize(d_loss))
 
-class SurpriseExplorationNetwork(PolicyVDNetwork, DynamicsNetwork):
+                if self.num_heads == 1:
+                    self.dynamics_loss = self.dynamics_loss[0]
+                    self.dynamics_optimizer = self.dynamics_optimizer[0]
+
+                # Autoencoder optimizer
+                self.autoencoder_optimizer = tf.train.AdamOptimizer(0.0005).minimize(self.autoencoder_loss)
+
+
+class ModelBasedPolicyVNetwork(DynamicsModelPolicyValueNetwork, DynamicsNetwork):
     pass
 
 

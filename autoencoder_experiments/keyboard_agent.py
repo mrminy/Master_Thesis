@@ -1,10 +1,3 @@
-import pickle
-
-import gym
-import numpy as np
-
-from autoencoder_tests.random_agent import preprocess
-
 """
 Specialized script for gathering data from Montezuma's Revenge
 Keys:
@@ -16,6 +9,12 @@ Keys:
     Q - jump left
 """
 
+import pickle
+import gym
+import numpy as np
+
+from autoencoder_experiments.random_agent import preprocess
+
 env = gym.make('MontezumaRevenge-v0')
 ACTIONS = env.action_space.n
 ROLLOUT_TIME = 10000
@@ -23,7 +22,7 @@ SKIP_CONTROL = 0
 human_agent_action = 0
 human_wants_restart = False
 human_sets_pause = False
-exit_and_save = False
+save_er = False  # Set true to save a data set of observations
 
 
 def key_press(key, mod):
@@ -43,8 +42,6 @@ def key_press(key, mod):
         a = 3  # right
     elif key == 97:  # A
         a = 4  # left
-    elif key == 65307:
-        exit_and_save = True
     if a <= 0 or a >= ACTIONS: return
     human_agent_action = a
 
@@ -73,8 +70,6 @@ def rollout(env):
     skip = 4
     for t in range(ROLLOUT_TIME):
         if not skip:
-            # print("taking action {}".format(human_agent_action))
-            # a = random.randint(9,17)
             if human_agent_action != 0:
                 a = human_agent_action
             else:
@@ -84,7 +79,7 @@ def rollout(env):
             skip -= 1
 
         obser, r, done, info = env.step(a)
-        obs_pre = preprocess(obser, crop_top=True, grey_scale=True, flatten=False)
+        obs_pre = preprocess(obser, flatten=False)
 
         er.append(obs_pre)
         env.render()
@@ -100,4 +95,5 @@ def rollout(env):
 
 # Play an episode and collect experience
 er = rollout(env)
-pickle.dump(np.array(er), open("my_er.pickle", "wb"))
+if save_er:
+    pickle.dump(np.array(er), open("er.pickle", "wb"))

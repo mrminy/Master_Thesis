@@ -1,12 +1,12 @@
+"""
+Tests different architectures for autoencoders alone and in combination with a transition prediction model
+"""
+
 import numpy as np
-from keras.layers import Input, Dense, Convolution2D, MaxPooling2D, UpSampling2D, Flatten, Reshape, \
-    Deconvolution2D
+from keras.layers import Input, Dense, Convolution2D, MaxPooling2D, UpSampling2D, Flatten, Reshape
 from keras.models import Model, Sequential
 from matplotlib import pyplot as plt
 
-"""
-Tests different architectures for (conv) autoencoders alone and in combination with a transition prediction network.
-"""
 
 
 def build_deep_autoencoder():
@@ -32,7 +32,7 @@ def build_conv_combo_autoencoder():
     """
     Convolutional autoencoder with fc layers to the embedded space layer which is consists of 512 nodes
     """
-    input_img = Input(shape=(84, 84, 4))
+    input_img = Input(shape=(84, 84, 1))
 
     x = Convolution2D(48, 4, 4, activation='relu', border_mode='same', name='c1')(input_img)
     x = MaxPooling2D((2, 2), border_mode='same')(x)

@@ -1,16 +1,37 @@
-import random
-from collections import deque
-import matplotlib.pyplot as plt
-from matplotlib.offsetbox import OffsetImage, AnnotationBbox
-from sklearn.manifold import TSNE
-from train import get_network_and_environment_creator, bool_arg
-import custom_logging
+"""
+Copyright [2017] [Alfredo Clemente]
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--------------------------------------------------------------
+Motification
+Added TSNE plot for the latent space from the autoencoder.
+"""
+
+
 import argparse
-import numpy as np
+import random
 import time
-from PIL import Image
+from collections import deque
+
+import matplotlib.pyplot as plt
+import numpy as np
 import tensorflow as tf
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+
+import custom_logging
 from paac import PAACLearner
+from train import get_network_and_environment_creator, bool_arg
 
 
 def imscatter(x, y, image, ax=None, zoom=1.):
@@ -39,10 +60,10 @@ def get_save_frame(dest_folder, name):
             return self.counter
 
     counter = Counter()
+    import scipy
 
     def get_frame(frame):
-        im = Image.fromarray(frame[:, :, ::-1])
-        im.save("{}/{}_{:05d}.png".format(dest_folder, name, counter.get()))
+        scipy.misc.imsave(dest_folder + name + str(counter.get()) + '.png', frame)
         counter.increase()
         return False
 
@@ -84,9 +105,10 @@ if __name__ == '__main__':
     rng = np.random.RandomState(int(time.time()))
     args.random_seed = rng.randint(1000)
 
-    db_size = 5000
-    img_database = deque(maxlen=db_size)
-    latent_database = deque(maxlen=db_size)
+    if args.embedding_plot:
+        db_size = 5000
+        img_database = deque(maxlen=db_size)
+        latent_database = deque(maxlen=db_size)
 
     network, env_creator = get_network_and_environment_creator(args)
 
@@ -111,7 +133,7 @@ if __name__ == '__main__':
             episode_over = False
             reward = 0.0
             while not episode_over:
-                if random.random() < 0.2:
+                if args.embedding_plot and random.random() < 0.2:
                     latent_var = sess.run(network.encoder_output, feed_dict={
                         network.autoencoder_input_ph: np.array([state[:, :, 0]]).reshape(1, 84, 84, 1)})
                     img_database.append(state[:, :, 0])
@@ -125,9 +147,10 @@ if __name__ == '__main__':
         print("Mean:", np.mean(rewards), "Min:", np.min(rewards), "Max:", np.max(rewards), "Std:", np.std(rewards))
 
     if args.embedding_plot:
+        from sklearn.manifold import TSNE
         manifold = TSNE(n_components=2)
         x_fitted = manifold.fit(np.array(latent_database))
-        print("Plotting")
+        print("Plotting TSNE of the latent space...")
         fig, ax = plt.subplots()
         num_imgs = 30
         idx = np.random.randint(len(img_database), size=num_imgs)  # Find random batch

@@ -1,3 +1,23 @@
+"""
+Copyright [2017] [Alfredo Clemente]
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--------------------------------------------------------------
+Motification
+Added networks for MB-PAAC. This includes different autoencoder architectures and the transition prediction model.
+"""
+
 import logging
 
 import numpy as np
@@ -121,7 +141,7 @@ class Network(object):
         self.T = conf['T']
         bonus_type = conf['bonus_type']
         self.num_heads = 1
-        if bonus_type == 'bootstrap':
+        if bonus_type == 'BDU':
             self.num_heads = int(conf['num_heads'])
 
         # For dynamics model
@@ -235,7 +255,7 @@ class DynamicsNetwork(Network):
 
         with tf.device(self.device):
             with tf.name_scope(self.name):
-                # NIPS network
+                # NIPS network for policy and value network
                 _, _, conv1 = conv2d('conv1', self.input, 16, 8, 4, 4)
                 _, _, conv2 = conv2d('conv2', conv1, 32, 4, 16, 2)
                 _, _, fc3 = fc('fc3', flatten(conv2), 256, activation="relu")
@@ -244,7 +264,7 @@ class DynamicsNetwork(Network):
                 self.autoencoder_movement_focus_input = tf.scalar_mul(2.0, tf.add(
                     tf.ceil(tf.subtract(self.autoencoder_input_next, self.autoencoder_input)), 1.0))
 
-                # Build selected AE architecture
+                # Build selected AE architecture for the dynamics model
                 if self.ae_arch == 'FC':
                     print("FC arch selected")
                     self.build_fc_architecture()
@@ -258,12 +278,12 @@ class DynamicsNetwork(Network):
                     print("CD arch selected")
                     self.build_conv_deconv_architecture()
 
-                # Prediction on latent space
+                # Building the transition prediction model
                 prediction_input = tf.concat([self.dynamics_input_prev, self.dynamics_input, self.action_input], axis=1,
                                              name='prediction_input_concat')
-                _, _, pred1 = fc('pred1', prediction_input, 1024, activation="tanh")
+                _, _, pred1 = fc('pred1', prediction_input, 512, activation="tanh")
                 pred1 = tf.nn.dropout(pred1, keep_prob=self.keep_prob, name='pred1_drop')
-                _, _, pred2 = fc('pred2', pred1, 1024, activation="tanh")
+                _, _, pred2 = fc('pred2', pred1, 512, activation="tanh")
                 pred2 = tf.nn.dropout(pred2, keep_prob=self.keep_prob, name='pred2_drop')
 
                 heads = []
@@ -312,7 +332,6 @@ class DynamicsNetwork(Network):
         d4_full = d4(d3_full)
         d5_full = d5(d4_full)
         d7_full = Reshape((7056,))(d5_full)
-        # d7_full = d5_full
 
         # Only decoding
         d1_decoder = d1(self.decoder_input)
@@ -321,7 +340,6 @@ class DynamicsNetwork(Network):
         d4_decoder = d4(d3_decoder)
         d5_decoder = d5(d4_decoder)
         d7_decoder = Reshape((7056,))(d5_decoder)
-        # d7_decoder = d5_decoder
 
         self.decoder_output = d7_decoder
         self.autoencoder_output = d7_full
@@ -329,12 +347,7 @@ class DynamicsNetwork(Network):
 
         self.emulator_reconstruction_loss = K.sum(
             K.binary_crossentropy(self.autoencoder_output, flatten(self.autoencoder_input)), axis=1)
-        # reconstruction_loss = tf.reduce_mean(
-        #     tf.pow(tf.multiply(tf.subtract(self.autoencoder_input, self.autoencoder_output),
-        #                        self.autoencoder_movement_focus_input), 2))
         kl_loss = -0.5 * K.sum(1 + self.z_log_sigma - K.square(self.z_mean) - K.exp(self.z_log_sigma), axis=-1)
-        # self.autoencoder_loss = tf.reduce_mean(tf.add(reconstruction_loss, kl_loss))
-        # self.autoencoder_loss = tf.add(reconstruction_loss, kl_loss)
         self.autoencoder_loss = tf.add(self.emulator_reconstruction_loss, kl_loss)
 
     def build_conv_deconv_architecture(self):
@@ -377,7 +390,6 @@ class DynamicsNetwork(Network):
         # MSE autoencoder reconstruction loss (with attention)
         reconstruction_loss = tf.pow(tf.multiply(tf.subtract(self.autoencoder_input, self.autoencoder_output),
                                                  self.autoencoder_movement_focus_input), 2)
-        # reconstruction_loss = tf.pow(tf.subtract(self.autoencoder_input, self.autoencoder_output), 2)
         mean_reconstruction_loss = tf.reduce_mean(reconstruction_loss)
         self.emulator_reconstruction_loss = tf.reduce_mean(
             tf.reshape(reconstruction_loss, (self.emulator_counts, 84 * 84)), axis=-1)

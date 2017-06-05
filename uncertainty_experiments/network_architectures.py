@@ -1,3 +1,7 @@
+"""
+Setup for performing uncertainty extraction experiments in deep neural networks for regression problems.
+"""
+
 import numpy as np
 import random
 from math import sin
@@ -7,6 +11,9 @@ import time
 
 
 def reg_function(x, dist):
+    """
+    The function f.
+    """
     return x + sin(4 * (x + dist)) + sin(13 * (x + dist)) + dist
 
 
@@ -16,6 +23,7 @@ def generate_samples(n):
     ys = []
 
     for i in range(0, n):
+        # Sample different points on the x-axis
         # if random.random() > 0.5:
         #     x = random.uniform(0.8, 2.)
         # else:
@@ -38,6 +46,9 @@ def generate_samples(n):
 
 
 def generate_x_samples(n_samples=10000, min_val=-10, max_val=10):
+    """
+    Generates a set of samples on the x-axis. Only used for testing
+    """
     X_pred = []
     for i in range(0, n_samples):
         X_pred.append([random.uniform(min_val, max_val)])
@@ -46,6 +57,9 @@ def generate_x_samples(n_samples=10000, min_val=-10, max_val=10):
 
 
 def plot_uncertainty_regression(X, Y, X_pred, Y_pred_mean, Y_pred_std):
+    """
+    Plots the different metrics.
+    """
     Y_pred_mean_min = Y_pred_mean - Y_pred_std
     Y_pred_mean_max = Y_pred_mean + Y_pred_std
     Y_pred_mean_min_double = Y_pred_mean - 2 * Y_pred_std
@@ -66,22 +80,11 @@ def plot_uncertainty_regression(X, Y, X_pred, Y_pred_mean, Y_pred_std):
     plt.show()
 
 
-def multilayer_perceptron_heads(x, weights, biases, keep, head):
-    # Hidden layer with RELU activation
-    layer_1 = tf.add(tf.matmul(x, weights['h1']), biases['b1'])
-    layer_1 = tf.nn.relu(layer_1)
-    layer_1 = tf.nn.dropout(layer_1, keep_prob=keep)
-
-    layer_head = tf.add(tf.matmul(layer_1, weights[head]), biases['b' + head])
-    layer_head = tf.nn.relu(layer_head)
-    layer_head = tf.nn.dropout(layer_head, keep_prob=keep)
-
-    # Output layer with linear activation
-    out_layer = tf.add(tf.matmul(layer_head, weights['out']), biases['out'])
-    return out_layer
-
-
 class MCDropout:
+    """
+    Contains functions for constructing, training and testing a deep neural network with MC dropout.
+    """
+
     def __init__(self, n_input, n_output, learning_rate, X_train, Y_train):
         # tf Graph input
         self.x = tf.placeholder("float", [None, n_input])
@@ -93,33 +96,23 @@ class MCDropout:
 
         n_hidden_1 = 60
         n_hidden_2 = 60
-        n_hidden_3 = 60
-        n_hidden_4 = 60
 
         # Store layers weight & bias
         self.weights = {
             'h1': tf.Variable(tf.random_normal([n_input, n_hidden_1])),
             'h2': tf.Variable(tf.random_normal([n_hidden_1, n_hidden_2])),
-            # 'h3': tf.Variable(tf.random_normal([n_hidden_2, n_hidden_3])),
-            # 'h4': tf.Variable(tf.random_normal([n_hidden_3, n_hidden_4])),
             'out': tf.Variable(tf.random_normal([n_hidden_2, n_output]))
         }
         self.biases = {
             'b1': tf.Variable(tf.random_normal([n_hidden_1])),
             'b2': tf.Variable(tf.random_normal([n_hidden_2])),
-            # 'b3': tf.Variable(tf.random_normal([n_hidden_3])),
-            # 'b4': tf.Variable(tf.random_normal([n_hidden_4])),
             'out': tf.Variable(tf.random_normal([n_output]))
         }
 
         self.preds = self.build_network()
 
         # Define loss and optimizer
-        delta = 0.000001
         self.cost = tf.reduce_mean(tf.square(tf.subtract(self.y, self.preds)))
-        # + delta * tf.nn.l2_loss(
-        #     weights['h1']) + delta * tf.nn.l2_loss(weights['h2']) + delta * tf.nn.l2_loss(
-        #     weights['h3']) + delta * tf.nn.l2_loss(weights['h4']) + delta * tf.nn.l2_loss(weights['out']))
         self.optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.cost)
 
         # Initializing the variables
@@ -142,14 +135,6 @@ class MCDropout:
         layer_2 = tf.nn.relu(layer_2)
         layer_2 = tf.nn.dropout(layer_2, keep_prob=self.keep_prob)
 
-        # layer_3 = tf.add(tf.matmul(layer_2, weights['h3']), biases['b3'])
-        # layer_3 = tf.nn.relu(layer_3)
-        # layer_3 = tf.nn.dropout(layer_3, keep_prob=keep)
-        #
-        # layer_4 = tf.add(tf.matmul(layer_3, weights['h4']), biases['b4'])
-        # layer_4 = tf.nn.relu(layer_4)
-        # layer_4 = tf.nn.dropout(layer_4, keep_prob=keep)
-
         # Output layer with linear activation
         out_layer = tf.add(tf.matmul(layer_2, self.weights['out']), self.biases['out'])
         return out_layer
@@ -157,7 +142,7 @@ class MCDropout:
     def train(self, training_epochs, batch_size=32, display_step=1, keep_prob=0.95):
         start_time = time.time()
 
-        cost_history = []
+        loss_history = []
 
         # Training cycle
         for epoch in range(training_epochs):
@@ -172,36 +157,33 @@ class MCDropout:
                                      feed_dict={self.x: selected_x, self.y: selected_y, self.keep_prob: keep_prob})
                 # Compute average loss
                 avg_cost += c / total_batch
-            cost_history.append(avg_cost)
+            loss_history.append(avg_cost)
             # Display logs per epoch step
             if epoch % display_step == 0:
                 print("Epoch:", '%04d' % (epoch + 1), "cost=", "{:.9f}".format(avg_cost))
         print("Optimization finished after", time.time() - start_time)
-        return cost_history
+        return loss_history
 
-    def test(self, plot=True, n_stochastic_forward_passes=100, keep_prob=0.95):
+    def test(self, plot=True, T_stochastic_forward_passes=100, keep_prob=0.95):
+        X_pred = generate_x_samples()
         start_time = time.time()
 
-        X_pred = generate_x_samples()
-
-        # The next line can be used to see how it performs without any stochastic forward passes (TODO)
-        # Y_pred_no_dropout = self.sess.run(self.preds, feed_dict={self.x: X_pred, self.keep_prob: 1.})
-
-        Y_pred_heads = []
-        if n_stochastic_forward_passes == 1:
-            Y_pred_heads = self.sess.run(self.preds, feed_dict={self.x: X_pred, self.keep_prob: 1.})
-            Y_pred_mean = np.mean(Y_pred_heads, axis=1)
-            Y_pred_std = np.std(Y_pred_heads, axis=1)
+        if T_stochastic_forward_passes == 1:
+            # No MC dropout
+            Y_pred = self.sess.run(self.preds, feed_dict={self.x: X_pred, self.keep_prob: 1.})
+            Y_pred_mean = np.mean(Y_pred, axis=1)
+            Y_pred_std = np.std(Y_pred, axis=1)
         else:
-            enumis = []  # Create copies of x_test
+            # Testing MC dropout
+            enumis = []  # Create T copies of x_test
             for x_test in X_pred:
-                for i in range(0, n_stochastic_forward_passes):
+                for i in range(0, T_stochastic_forward_passes):
                     enumis.append(x_test)
             enumis = np.array(enumis)
-            Y_pred_heads = self.sess.run(self.preds, feed_dict={self.x: enumis, self.keep_prob: keep_prob}).flatten()
-            Y_pred_heads = Y_pred_heads.reshape((len(X_pred), n_stochastic_forward_passes))
-            Y_pred_mean = np.mean(Y_pred_heads, axis=1).flatten()
-            Y_pred_std = np.std(Y_pred_heads, axis=1).flatten()
+            Y_pred = self.sess.run(self.preds, feed_dict={self.x: enumis, self.keep_prob: keep_prob}).flatten()
+            Y_pred = Y_pred.reshape((len(X_pred), T_stochastic_forward_passes))
+            Y_pred_mean = np.mean(Y_pred, axis=1).flatten()
+            Y_pred_std = np.std(Y_pred, axis=1).flatten()
 
         print("Time used on inference:", time.time() - start_time)
         if plot:
@@ -212,6 +194,11 @@ class MCDropout:
 
 
 class Bootstrap:
+    """
+    Contains functions for constructing, training and testing a deep neural network with bootstrap.
+    It also gives the possibility to combine bootstrap with MC dropout.
+    """
+
     def __init__(self, n_input, n_output, learning_rate, X_train, Y_train, nb_heads=4):
         # tf Graph input
         self.x = tf.placeholder("float", [None, n_input])
@@ -221,27 +208,24 @@ class Bootstrap:
         self.X_train = X_train
         self.Y_train = Y_train
 
-        self.nb_heads = nb_heads
+        self.nb_heads = nb_heads  # Number of output heads
         self.H = np.random.randint(nb_heads, size=len(X_train))
 
         n_hidden_1 = 60
         n_hidden_2 = 60
-        n_hidden_3 = 60
-        n_hidden_4 = 60
-        n_head = 1
+        n_head = 1  # Output layer size
 
-        # Store layers weight & bias
+        # Store layers weight & biases
         self.weights = {
             'h1': tf.Variable(tf.random_normal([n_input, n_hidden_1])),
             'h2': tf.Variable(tf.random_normal([n_hidden_1, n_hidden_2])),
-            # 'out': tf.Variable(tf.random_normal([n_hidden_2, n_output]))
         }
         self.biases = {
             'b1': tf.Variable(tf.random_normal([n_hidden_1])),
             'b2': tf.Variable(tf.random_normal([n_hidden_2])),
-            # 'out': tf.Variable(tf.random_normal([n_output]))
         }
 
+        # Generate the output heads
         self.head_weights = {}
         self.head_biases = {}
         for i in range(0, nb_heads):
@@ -249,11 +233,15 @@ class Bootstrap:
             self.head_weights[str_index] = tf.Variable(tf.random_normal([n_hidden_2, n_head]))
             self.head_biases[str_index] = tf.Variable(tf.random_normal([n_head]))
 
+        base_network = self.build_network()
+
         self.preds = []
         self.costs = []
         self.optimizers = []
         for i in range(0, nb_heads):
-            self.preds.append(self.build_network(i))
+            # Output layer with linear activation
+            head_out_layer = tf.add(tf.matmul(base_network, self.head_weights['head' + str(i)]), self.head_biases['head' + str(i)])
+            self.preds.append(head_out_layer)
             self.costs.append(tf.reduce_mean(tf.square(tf.subtract(self.y, self.preds[i]))))
             self.optimizers.append(tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.costs[i]))
 
@@ -266,7 +254,7 @@ class Bootstrap:
         self.sess = tf.Session(config=config)
         self.sess.run(self.init)
 
-    def build_network(self, head_index):
+    def build_network(self):
         # Hidden layer with RELU activation
         layer_1 = tf.add(tf.matmul(self.x, self.weights['h1']), self.biases['b1'])
         layer_1 = tf.nn.relu(layer_1)
@@ -277,10 +265,7 @@ class Bootstrap:
         layer_2 = tf.nn.relu(layer_2)
         layer_2 = tf.nn.dropout(layer_2, keep_prob=self.keep_prob)
 
-        # Output layer with linear activation
-        out_layer = tf.add(tf.matmul(layer_2, self.head_weights['head' + str(head_index)]),
-                           self.head_biases['head' + str(head_index)])
-        return out_layer
+        return layer_2
 
     def train(self, training_epochs, batch_size=32, display_step=1, select_head_from_mask=False, keep_prob=0.95):
         start_time = time.time()
@@ -313,10 +298,10 @@ class Bootstrap:
         return cost_history
 
     def test(self, plot=True, use_mc_dropout=False, n_stochastic_forward_passes=100, keep_prob=0.95):
-        start_time = time.time()
         X_pred = generate_x_samples()
-
+        start_time = time.time()
         Y_pred_heads = []
+
         if use_mc_dropout:
             # Combines mc dropout with bootstrap heads
             enumis = []

@@ -1,3 +1,24 @@
+"""
+Copyright [2017] [Alfredo Clemente]
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--------------------------------------------------------------
+Motification
+Added better statistical outputs to console. Added extra plot for the dynamics model.
+"""
+
+
 import csv
 from sklearn import metrics
 
@@ -284,6 +305,7 @@ class StatsPrinter:
                 out += 'AUC: ' + str(auc_score) + '\n'
                 out += 'Sum: ' + str(np.sum(values, axis=0)) + '\n'
                 out += 'Max: ' + str(np.max(values, axis=0)) + '\n'
+                out += 'Time steps: ' + str(time_steps[-1]) + '\n'
 
         print(out)
 
@@ -295,7 +317,6 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--folder', default='', help='Folder where the logs are stored', dest="folder")
     parser.add_argument('-t', '--max_timesteps', default='0', help='Maximum timesteps for stats printer',
                         dest="max_timesteps", type=int)
-    # parser.add_argument('-p', '--print_graphs', type=bool, default=True, help='Print graphs or not', dest="print_graphs")
     parser.add_argument('-ws', '--smoothing_window_size', default='50', type=int,
                         help='The window size to use for smoothing', dest="window_size")
     args = parser.parse_args()
@@ -304,7 +325,6 @@ if __name__ == '__main__':
     printer = StatsPrinter(configs, args)
     printer.print_stats()
 
-    # if args.print_graphs:
     configs = [{
         'file_name': args.folder + 'env_log_0.txt',
         'to_plot': [5, 6]
