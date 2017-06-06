@@ -1,5 +1,5 @@
 """
-Helper script for comparing different runs.
+Script for comparing different runs.
 """
 
 import csv

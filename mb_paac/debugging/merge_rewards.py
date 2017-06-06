@@ -1,5 +1,5 @@
 """
-Helper script for merging different runs into average data.
+Script for merging different runs into average data.
 """
 
 import csv

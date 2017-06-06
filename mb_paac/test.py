@@ -146,6 +146,7 @@ if __name__ == '__main__':
             print(reward)
         print("Mean:", np.mean(rewards), "Min:", np.min(rewards), "Max:", np.max(rewards), "Std:", np.std(rewards))
 
+    # Generate a plot for visualizing the latent space learnt by the autoencoder
     if args.embedding_plot:
         from sklearn.manifold import TSNE
         manifold = TSNE(n_components=2)

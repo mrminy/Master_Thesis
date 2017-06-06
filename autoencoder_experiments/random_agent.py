@@ -50,14 +50,14 @@ if __name__ == '__main__':
 
     logger.setLevel(logging.INFO)
 
-    env = gym.make('Pong-v0')
+    env = gym.make('Pong-v0') # Select environment
     # env = gym.make('MontezumaRevenge-v0')
 
     outdir = '/tmp/random-agent-results'
     env.seed(0)
     agent = RandomAgent(env.action_space)
 
-    nb_episodes = 40
+    nb_episodes = 40 # Select number of episodes to play
     frame_skip = 1
     reward = 0
     done = False
@@ -65,16 +65,16 @@ if __name__ == '__main__':
     max_loss = 1.
 
     # Experience replay parameters
+    max_er = 10000 # Select experience replay size
     er = []
     action_history = []
-    max_er = 10000
 
     # Special experience replay (gathered manually)
     room1_ob_pre = None
     my_er = pickle.load(open("er.pickle", "rb"))
     another_room = my_er[-1]
 
-    z_shape = 256
+    z_shape = 256 # Select latent space size
     autoencoder, encoder, decoder = build_conv_combo_autoencoder()
     predictor = build_deep_predictor(z_shape, env.action_space.n)
 

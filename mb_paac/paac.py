@@ -161,12 +161,12 @@ class PAACLearner(ActorLearner):
 
         y_batch = np.zeros((self.max_local_steps, self.emulator_counts))
         adv_batch = np.zeros((self.max_local_steps, self.emulator_counts))
-        intrinsic_bonus = np.zeros((self.max_local_steps, self.emulator_counts))
         rewards = np.zeros((self.max_local_steps, self.emulator_counts))
         states = np.zeros([self.max_local_steps] + list(shared_states.shape), dtype=np.uint8)
         actions = np.zeros((self.max_local_steps, self.emulator_counts, self.num_actions))
         values = np.zeros((self.max_local_steps, self.emulator_counts))
         episodes_over_masks = np.zeros((self.max_local_steps, self.emulator_counts))
+        intrinsic_bonus = np.zeros((self.max_local_steps, self.emulator_counts))
 
         start_time = time.time()
 
@@ -219,8 +219,9 @@ class PAACLearner(ActorLearner):
             intrinsic_bonus = self.update_reward_bonus(states, actions, intrinsic_bonus)
             avg_reward_bonus = np.mean(intrinsic_bonus)
 
+            # Add intrinsic reward bonuses to the rewards
             for t in reversed(range(max_local_steps)):
-                n_Rs = intrinsic_bonus[t] + self.gamma * n_Rs * episodes_over_masks[t]
+                n_Rs = rewards[t] + intrinsic_bonus[t] + self.gamma * n_Rs * episodes_over_masks[t]
                 y_batch[t] = np.copy(n_Rs)
                 adv_batch[t] = n_Rs - values[t]
 
@@ -279,6 +280,7 @@ class PAACLearner(ActorLearner):
                                 (global_steps - global_step_start) / (curr_time - start_time),
                                 last_ten, self.dynamics_loss_mean, self.autoencoder_loss_mean, avg_reward_bonus))
 
+            # Save plots for dynamics model
             if self.enable_plotting and counter % (40960 / self.emulator_counts) == 0:
                 self.plot_dynamics_model()
 
@@ -292,6 +294,13 @@ class PAACLearner(ActorLearner):
             self.plot_dynamics_model()
 
     def update_reward_bonus_ae_loss(self, states, actions, intrinsic_reward):
+        """
+        Updates the intrinsic reward bonus with respect to the autoencoder loss.
+        :param states: observed states
+        :param actions: selected actions (not needed for this reward bonus)
+        :param intrinsic_reward: the intrinsic rewards to update
+        :return: the updated intrinsic reward bonuses
+        """
         for t in range(self.max_local_steps):
             autoencoder_states_curr = states[t, :, :, :, -2].reshape(self.emulator_counts, 84, 84, 1)
             autoencoder_states_next = states[t, :, :, :, -1].reshape(self.emulator_counts, 84, 84, 1)
@@ -309,6 +318,13 @@ class PAACLearner(ActorLearner):
         return intrinsic_reward
 
     def update_reward_bonus_dynamics_loss(self, states, actions, intrinsic_reward):
+        """
+        Updates the intrinsic reward bonus with respect to the dynamics prediction error.
+        :param states: observed states
+        :param actions: selected actions
+        :param intrinsic_reward: the intrinsic rewards to update
+        :return: the updated intrinsic reward bonuses
+        """
         for t in range(self.max_local_steps):
             autoencoder_states_prev = states[t, :, :, :, -3].reshape(self.emulator_counts, 84, 84, 1)
             autoencoder_states_curr = states[t, :, :, :, -2].reshape(self.emulator_counts, 84, 84, 1)
@@ -347,6 +363,14 @@ class PAACLearner(ActorLearner):
         return intrinsic_reward
 
     def update_reward_bonus_surprise(self, states, actions, intrinsic_reward):
+        """
+        Updates the intrinsic reward bonus with respect to the uncertainty extracted from the dynamics model.
+        The uncertainty is extracted by MC dropout.
+        :param states: observed states
+        :param actions: selected actions
+        :param intrinsic_reward: the intrinsic rewards to update
+        :return: the updated intrinsic reward bonuses
+        """
         T = self.network.T  # number of stochastic forward passes
 
         for t in range(self.max_local_steps):
@@ -388,8 +412,17 @@ class PAACLearner(ActorLearner):
         return intrinsic_reward
 
     def update_reward_bonus_surprise_boot_and_mc(self, states, actions, intrinsic_reward):
+        """
+        Updates the intrinsic reward bonus with respect to the uncertainty extracted from the dynamics model.
+        However, for this bonus type, the dynamics model is bootstrapped (contains multiple output layers).
+        The uncertainty is still extracted by MC dropout.
+        :param states: observed states
+        :param actions: selected actions
+        :param intrinsic_reward: the intrinsic rewards to update
+        :return: the updated intrinsic reward bonuses
+        """
         T = self.network.T  # number of stochastic forward passes
-        heads = self.network.num_heads
+        heads = self.network.num_heads  # number of output heads
 
         for t in range(self.max_local_steps):
             autoencoder_states_prev = states[t, :, :, :, -3].reshape(self.emulator_counts, 84, 84, 1)
@@ -437,7 +470,9 @@ class PAACLearner(ActorLearner):
         return intrinsic_reward
 
     def train_dynamics_model(self, num_epochs=100):
-        # Optimize autoencoder
+        """
+        Dynamically trains the deep dynamics model
+        """
         autoencoder_loss_arr = []
         dynamics_loss_arr = []
         for i in range(num_epochs):
@@ -468,6 +503,7 @@ class PAACLearner(ActorLearner):
             prev_latent_vars = prev_next_latent_vars[0]
             next_latent_vars = prev_next_latent_vars[1]
 
+            # Train the transition prediction model
             feed_dict = {self.network.dynamics_input_prev: prev_latent_vars,
                          self.network.dynamics_input: latent_vars,
                          self.network.dynamics_latent_target: next_latent_vars,
@@ -487,6 +523,9 @@ class PAACLearner(ActorLearner):
         return autoencoder_loss_arr, dynamics_loss_arr
 
     def plot_dynamics_model(self, save_imgs=True):
+        """
+        Generates plots for the dynamics model.
+        """
         n_imgs = 4
         sample = random.sample(self.replay_memory_dynamics_model, 1)[0]
         idx_batch = np.arange(n_imgs)
@@ -548,6 +587,9 @@ class PAACLearner(ActorLearner):
 
 def plot_reconstruction_examples(img_array, nb_examples=10, img_width=84, img_height=84, show_plot=True, save_fig=False,
                                  save_path=''):
+    """
+    Function for generating plots comparing images.
+    """
     n = nb_examples
     rows = len(img_array)
 

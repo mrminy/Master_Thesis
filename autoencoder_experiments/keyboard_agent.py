@@ -15,14 +15,15 @@ import numpy as np
 
 from autoencoder_experiments.random_agent import preprocess
 
+# Parameters
 env = gym.make('MontezumaRevenge-v0')
 ACTIONS = env.action_space.n
-ROLLOUT_TIME = 10000
 SKIP_CONTROL = 0
+max_play_time = 10000
 human_agent_action = 0
 human_wants_restart = False
 human_sets_pause = False
-save_er = False  # Set true to save a data set of observations
+save_er = False  # Set true to save a observations to pickle
 
 
 def key_press(key, mod):
@@ -68,7 +69,7 @@ def rollout(env):
     er = []
     obser = env.reset()
     skip = 4
-    for t in range(ROLLOUT_TIME):
+    for t in range(max_play_time):
         if not skip:
             if human_agent_action != 0:
                 a = human_agent_action

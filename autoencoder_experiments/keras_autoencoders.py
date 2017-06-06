@@ -236,7 +236,6 @@ def plot_examples_autoencoder(autoencoder, X_test, nb_examples=10):
         # display original
         ax = plt.subplot(2, n, i + 1)
         plt.imshow(X_test[i].reshape(84, 84))
-        # plt.imshow(X_test[i])
         plt.gray()
         ax.get_xaxis().set_visible(False)
         ax.get_xaxis().set_visible(False)
@@ -245,7 +244,6 @@ def plot_examples_autoencoder(autoencoder, X_test, nb_examples=10):
         # display reconstruction
         ax = plt.subplot(2, n, i + 1 + n)
         plt.imshow(decoded_imgs[i].reshape(84, 84))
-        # plt.imshow(decoded_imgs[i])
         plt.gray()
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
