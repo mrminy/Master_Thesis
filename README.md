@@ -1,31 +1,19 @@
-# Surprise-based exploration with a model-based architecture
-This is the code repository for my thesis.
+# Intrinsic Motivation in Reinforcement Learning with Deep Dynamics Models
+This is the code repository for my master's thesis.
 
 #### Contents
-- Experiments for combining an autoencoder with a prediction model in the latent space in Atari environments
-- Experiments for extracting uncertainty in deep neural networks (MC dropout and bootstrap) in simple regression task
-- A3C implementation with the surprise-based exploration method (running Atari games)
-
-#### TODO
-##### TODO Architecture
-- Try using the compressed latent space from the CNN in the DQN/A3C
-- Try to take the difference between frame 1 and frame 4 and feed it to the autoencoder
-- Try to make a decoder that decodes the latent space from the CNN in the DQN/A3C. Prediction net can then use one of the first layers in the decoder.
-- Try with different dropout rate for the prediction network (0.05 --> from the Deep PILCO paper)
-- Test against a randomly generated uncertainty distribution (to see if the action uncertainty actually helps)
-
-##### TODO DQN
-- Implement prioritized experience replay (dynamics model will benefit from this as well)
-- Implement saving of images from the autoencoder (and possibly the prediction model) during a run
-- Change autoencoder to take one frame at the time and then concatenate the latent vectors for the 4 consecutive frames
+- [Experiments for combining an autoencoder](https://github.com/mrminy/Master_Thesis/tree/master/autoencoder_experiments) with a prediction model in the latent space in Atari environments
+- [Experiments for extracting uncertainty in deep neural networks](https://github.com/mrminy/Master_Thesis/tree/master/uncertainty_experiments) (MC dropout and bootstrap) in simple regression tasks
+- [MB-PAAC](https://github.com/mrminy/Master_Thesis/tree/master/mb_paac) implementation, where PAAC is combined with a deep dynamics model for extracting different intrinsic reward bonuses.
 
 
-##### TODO A3C
-- Implement my architecture for surprise-based exploration
-
-##### A3C traai requirements
+##### MB-PAAC requirements
+- Python (3.4+)
+- TensorFlow (1.0+)
+- Keras (1.2+)
 - scikit-image
 - cython
-- gym[all]
-- tensorflow
+- numpy
+- python3-tk
+- [ALE](https://github.com/mgbellemare/Arcade-Learning-Environment)
 - matplotlib
